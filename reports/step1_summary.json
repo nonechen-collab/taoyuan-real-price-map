@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-18T23:40:28+08:00",
-  "environment": "local",
+  "generated_at": "2026-10-18T23:52:08+08:00",
+  "environment": "github-actions",
   "mode": "online",
   "probe": {
     "url": "https://plvr.land.moi.gov.tw/DownloadOpenData",
     "ok": true,
     "status": 200,
     "bytes": 30512,
-    "seconds": 0.21,
+    "seconds": 1.15,
     "content_type": "text/html;charset=UTF-8",
     "error": null,
     "snippet": " <!DOCTYPE> <html> <head> <meta charset=\"utf-8\"> <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta name=\"description\" con",
@@ -23,7 +23,7 @@
       "ok": true,
       "status": 200,
       "bytes": 1681113,
-      "seconds": 0.81,
+      "seconds": 2.13,
       "content_type": "application/octet-stream",
       "error": null,
       "snippet": null,
@@ -38,7 +38,7 @@
       "ok": true,
       "status": 200,
       "bytes": 16508126,
-      "seconds": 1.36,
+      "seconds": 11.51,
       "content_type": "application/octet-stream",
       "error": null,
       "snippet": null,
@@ -504,7 +504,7 @@
     }
   },
   "conclusions": {
-    "connectivity": "✅ 可以（HTTP 200，0.21 秒）",
+    "connectivity": "✅ 可以（HTTP 200，1.15 秒）",
     "balcony": "不含：陽台與附屬建物分開計，室內面積＝主建物＋附屬建物＋陽台",
     "parking_unpriced": "買賣 21.8%（1,750／8,018 筆含車位的房屋交易）；預售屋 1.1%（23／2,103 筆含車位的房屋交易）",
     "unit_price": "已扣車位：有拆價的 6,195 筆中 100% 吻合（總價−車位價）÷（建物面積−車位面積）；車位未拆價的 1,010 筆：總價÷建物總面積 吻合 100%，總價÷（建物面積−車位面積） 吻合 0%"

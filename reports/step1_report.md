@@ -1,16 +1,16 @@
 # 第一步報告：連線測試與資料檢查
 
-- 產生時間：2026-10-18 23:40（台灣時間）
-- 執行環境：本機（Windows），Python 3.13.15
+- 產生時間：2026-10-18 23:52（台灣時間）
+- 執行環境：GitHub Actions（雲端，海外 IP），Python 3.12.3
 - 資料來源：內政部不動產成交案件實際資訊資料供應系統（政府資料開放授權條款－第1版）
 
 ## 一、結論
 
 | 問題 | 結果 |
 |---|---|
-| 連得到內政部網站嗎 | ✅ 可以（HTTP 200，0.21 秒） |
-| 下載最新一期（本期） | ✅ 1.7 MB，0.81 秒，桃園檔 11 個 |
-| 下載上一季（115S3） | ✅ 16.5 MB，1.36 秒，桃園檔 11 個 |
+| 連得到內政部網站嗎 | ✅ 可以（HTTP 200，1.15 秒） |
+| 下載最新一期（本期） | ✅ 1.7 MB，2.13 秒，桃園檔 11 個 |
+| 下載上一季（115S3） | ✅ 16.5 MB，11.51 秒，桃園檔 11 個 |
 | 陽台是否含在附屬建物（買賣表） | 不含：陽台與附屬建物分開計，室內面積＝主建物＋附屬建物＋陽台 |
 | 車位未拆價比例 | 買賣 21.8%（1,750／8,018 筆含車位的房屋交易）；預售屋 1.1%（23／2,103 筆含車位的房屋交易） |
 | 官方單價算法（買賣表） | 已扣車位：有拆價的 6,195 筆中 100% 吻合（總價−車位價）÷（建物面積−車位面積）；車位未拆價的 1,010 筆：總價÷建物總面積 吻合 100%，總價÷（建物面積−車位面積） 吻合 0% |
@@ -876,7 +876,7 @@ Phase 2 驗收樣本預查（建案名稱含關鍵字）：
 
 | 項目 | 網址 | HTTP | 大小 | 秒 | 錯誤 |
 |---|---|---|---|---|---|
-| 下載頁 | https://plvr.land.moi.gov.tw/DownloadOpenData | 200 | 31 KB | 0.21 | — |
-| 下載最新一期（本期） | https://plvr.land.moi.gov.tw/Download?type=zip&fileName=lvr_landcsv.zip | 200 | 1.7 MB | 0.81 | — |
-| 下載上一季（115S3） | https://plvr.land.moi.gov.tw/DownloadSeason?season=115S3&type=zip&fileName=lvr_landcsv.zip | 200 | 16.5 MB | 1.36 | — |
+| 下載頁 | https://plvr.land.moi.gov.tw/DownloadOpenData | 200 | 31 KB | 1.15 | — |
+| 下載最新一期（本期） | https://plvr.land.moi.gov.tw/Download?type=zip&fileName=lvr_landcsv.zip | 200 | 1.7 MB | 2.13 | — |
+| 下載上一季（115S3） | https://plvr.land.moi.gov.tw/DownloadSeason?season=115S3&type=zip&fileName=lvr_landcsv.zip | 200 | 16.5 MB | 11.51 | — |
 
