@@ -26,15 +26,12 @@
 - 內政部憑證鏈過不了 Python 3.13 起的嚴格檢查：只關掉 VERIFY_X509_STRICT，不可關閉憑證驗證（step1_probe.py 已處理）
 
 ## 目前進度（2026-10-18 本機 Claude Code）
-- Python 3.13.15 已用 winget 裝在使用者帳號下（`%LOCALAPPDATA%\Programs\Python\Python313`，已加進 PATH）；Git 2.54；沒有 gh CLI
-- workflow 已移到 `.github/workflows/step1-probe.yml`
-- 第一步本機實測完成：本期、115S3 下載成功，報告在 `reports/step1_report.md`，結論已填進 SPEC 決策紀錄
-- 發現「前期下載」網址可補季檔缺口：`DownloadHistory?type=history&fileName=20261001`；10/1 那期已存於 `data/raw/_downloads/20261001.zip`
-- 還沒有 GitHub repo；GitHub Actions 尚未測
+- Python 3.13.15 已用 winget 裝在使用者帳號下（`%LOCALAPPDATA%\Programs\Python\Python313`，已加進 PATH）；Git 2.54；沒有 gh CLI（查 GitHub 狀態用公開 API，未登入每小時 60 次）
+- GitHub 公開 repo 已建立並推送：https://github.com/nonechen-collab/taoyuan-real-price-map ；git 身分已設成 GitHub 隱藏信箱（repo 本地設定）
+- 第一步完成：本機與 GitHub Actions 都能下載內政部資料，結論已填進 SPEC 決策紀錄；`reports/step1_report.md` 是 Actions 版報告（Actions 會把報告 commit 回 repo，本機改檔前先 `git pull --rebase`）
+- 「前期下載」網址可補季檔缺口：`DownloadHistory?type=history&fileName=20261001`；10/1 那期已存於 `data/raw/_downloads/20261001.zip`（不進 repo）
 
 ## 下一步（照順序）
-1. 使用者在 github.com 建立空的公開 repo `taoyuan-real-price-map`，告知帳號名稱；用 noreply 信箱設定 repo 的 git 身分後 commit、推送（Git Credential Manager 會跳瀏覽器登入）
-2. 確認 step1-probe workflow 在 GitHub Actions 上也下載成功，把結果填進 SPEC
-3. 等使用者確認第一步，並決定：室內坪／公設比公式、特殊交易關鍵字清單、買賣表內預售交屋的處理（建議見 SPEC 決策紀錄）
-4. Phase 1 前必須先和使用者決定「地理編碼來源」：TGOS 自 2025-04-07 起個人可能申請不到（見研究摘要），SPEC 原本的定位順序要重新決定
-5. Phase 1 管線每次要下載「本期＋前期」，避免漏期
+1. 依 SPEC 規定停在這裡，等使用者確認第一步，並決定：室內坪／公設比公式、特殊交易關鍵字清單（增建類建議只標示不排除，與 SPEC 原文不同）、買賣表內預售交屋的處理（建議見 SPEC 決策紀錄）
+2. Phase 1 前必須先和使用者決定「地理編碼來源」：TGOS 自 2025-04-07 起個人可能申請不到（見研究摘要），SPEC 原本的定位順序要重新決定
+3. Phase 1 管線每次要下載「本期＋前期」，避免漏期

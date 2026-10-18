@@ -139,7 +139,7 @@ repo 結構說明、中文 README（含我要手動做的步驟）、.env.exampl
 | 開發環境 | 改用本機 Claude Code（Windows 電腦、台灣網路）；Claude 雲端環境被自己的對外代理擋（網域不在允許清單），不是內政部擋 | 2026-10-18 |
 | 內政部下載網址格式 | 本機實測成功：本期 `Download?type=zip&fileName=lvr_landcsv.zip`（1.7 MB）；前期 `DownloadHistory?type=history&fileName=20261001`（發布日 YYYYMMDD，14.6 MB，zip 內另含 txt／xml／xls）；季 `DownloadSeason?season=115S3&type=zip&fileName=lvr_landcsv.zip`（16.5 MB）。桃園檔皆為 UTF-8-sig、第 2 列英文欄名 | 2026-10-18 |
 | 本機能否連到內政部網站 | 可以（HTTP 200，0.2 秒） | 2026-10-18 |
-| GitHub Actions 能否連到內政部網站 | 待 repo 建好後自測；研究：他人專案 2026-09 在 Actions 上下載成功 | |
+| GitHub Actions 能否連到內政部網站 | 可以（海外 IP，HTTP 200）：本期 1.7 MB、115S3 16.5 MB 都下載成功，筆數與本機相同 → 排程照原架構放在 GitHub Actions，不需要本機一鍵更新的備案 | 2026-10-18 |
 | 下載程式的 HTTPS 驗證 | Python 3.13 起的嚴格檢查會擋內政部憑證鏈；只關閉 VERIFY_X509_STRICT，仍驗證憑證 | 2026-10-18 |
 | 季檔與本期檔的缺口 | 實測確認：115S3 季檔預售／租賃只到 8/10、本期從 8/21 起，缺 10/1 發布那期（8/11–8/20）。做法：每次排程同時下載「本期＋前期」，累積進自己的資料、以編號去重，不重建；10/1 那期已手動補下載存於 data/raw/_downloads/20261001.zip | 2026-10-18 |
 | 陽台面積是否含在附屬建物面積 | 不含（分開計）。依據：無公設的透天厝 576 筆中 73% 總面積＝主建物＋附屬＋陽台、0% 總面積＝主建物＋附屬；陽台＞0 的 10,021 筆中 83% 附屬建物＝0 | 2026-10-18 |
@@ -155,7 +155,7 @@ repo 結構說明、中文 README（含我要手動做的步驟）、.env.exampl
 ## 進度紀錄
 | 階段 | 狀態 | 測試網址 | 備註 |
 |---|---|---|---|
-| 第一步 | 本機實測完成，GitHub Actions 待測 | | 2026-10-18 本機下載本期、前期、115S3 成功，報告在 reports/step1_report.md；待建 GitHub repo 後確認 Actions 也能下載 |
+| 第一步 | 完成，待使用者確認 | https://github.com/nonechen-collab/taoyuan-real-price-map/actions | 2026-10-18 本機與 GitHub Actions 都下載成功；reports/step1_report.md 為 Actions 版報告 |
 | Phase 1 | 未開始 | | |
 | Phase 2 | 未開始 | | |
 | Phase 3 | 未開始 | | |
