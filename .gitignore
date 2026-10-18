@@ -1,0 +1,9 @@
+# 原始下載檔不進 repo（太大，且每次都能重新下載）
+data/raw/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+
+# 個人資訊（不上傳）
+CLAUDE.local.md

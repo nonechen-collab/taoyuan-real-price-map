@@ -1,0 +1,62 @@
+# 第一步：在 GitHub 的雲端機器上測試能不能連到內政部網站，並下載、分析桃園資料。
+# 推送程式後會自動執行；也可以在 Actions 頁面手動按 Run workflow。
+name: 第一步：連線測試與資料檢查
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/step1_probe.py"
+      - ".github/workflows/step1-probe.yml"
+
+permissions:
+  contents: write # 需要把報告存回 repo
+
+concurrency:
+  group: step1-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: 取得程式
+        uses: actions/checkout@v6
+
+      - name: 連線測試、下載並分析桃園資料
+        run: python3 scripts/step1_probe.py
+
+      - name: 把報告顯示在執行摘要（Summary）
+        if: always()
+        run: |
+          if [ -f reports/step1_report.md ]; then
+            cat reports/step1_report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 上傳原始檔與報告（保留 7 天）
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: step1-data
+          path: |
+            data/raw/
+            reports/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: 把報告存回 repo
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/
+          if git diff --cached --quiet; then
+            echo "報告沒有變化"
+          else
+            git commit -m "第一步報告 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+            git pull --rebase
+            git push
+          fi
