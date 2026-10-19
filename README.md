@@ -1,69 +1,114 @@
-# 桃園市實價登錄地圖系統
+# 桃園市實價登錄地圖
 
-個人自用、手機優先的桃園實價登錄地圖。需求、決策與進度都記在 [SPEC.md](SPEC.md)。
+個人自用、手機優先的桃園實價登錄地圖：看屋現場查附近成交、比較預售建案、看區域行情、議價找比較案例。
 
-## 用 Claude Code 繼續開發（建議）
+- 網站：https://nonechen-collab.github.io/taoyuan-real-price-map/
+- 需求、決策與進度：[SPEC.md](SPEC.md)
+- 欄位、單位、公式：[docs/data-dictionary.md](docs/data-dictionary.md)
 
-1. 打開 Claude 桌面 App，點上方的 **Code**
-2. 選 **Local**，按 **Select folder**，選這個資料夾（`taoyuan-real-price-map`）
-3. 輸入：「讀 CLAUDE.md，從下一步開始做」
+## 怎麼用（Android Chrome）
 
-Claude Code 每次開啟都會自動讀 `CLAUDE.md`，裡面有目前進度、下一步和資料陷阱。
+| 想做的事 | 操作 |
+|---|---|
+| 看附近成交 | 按右下 📍（看屋模式）→ 允許定位 → 面板列出 300／500 m／1 km 內成交，依距離排序 |
+| 查某個地點 | 長按地圖任一點設為圓心 |
+| 自訂範圍 | 按 ✏️ → 在地圖上點出多邊形頂點 → 完成 |
+| 看社區 | 放大到中間層級，點泡泡（件數＋中位單價）；或點成交卡片下方「社區：…」 |
+| 篩選 | 左上「篩選」：類別、期間、行政區、型態、屋齡、房數、總價、單價、坪數、樓層、電梯、車位 |
+| 分享目前畫面 | 直接分享網址（篩選、範圍、選中的成交都寫在網址裡） |
+| 加到主畫面 | Chrome 選單 →「加到主畫面」，之後可離線看上次載入的資料 |
 
-## 目前進度：第一步（連線測試＋資料檢查）
+地圖三層級：縮小看六角格（中位單價色塊）→ 中間看社區泡泡 → 放大看每一筆的扣車位單價。色階預設依畫面內的分位數切 5 級，點圖例可切換固定級距。
 
-`scripts/step1_probe.py` 會做三件事：
+## 資料怎麼更新
 
-1. 測試這台機器連不連得到內政部實價登錄網站
-2. 下載最新一期與上一季的全國 CSV，只留下桃園（檔名 h 開頭）的檔案
-3. 產生報告：欄位清單、各檔筆數與樣本、陽台是否含在附屬建物、車位未拆價比例、備註最常見的 20 種寫法
+GitHub Actions 每月 2、12、22 日台灣時間 10:00 自動執行 `.github/workflows/update-data.yml`：
 
-在 GitHub 上由 `.github/workflows/step1-probe.yml` 執行：推送這兩個檔案時會自動跑，也可以手動按。
+1. 下載內政部實價登錄「本期＋前期」（還有剛結束的季檔），只留桃園檔，存成 `data/periods/<期別>.zip`（只新增、不改寫）
+2. 新期別筆數是 0 或暴增 → 保留舊資料、開 GitHub Issue 通知（Issue 會寄信給你）
+3. 清理、用桃園市門牌坐標定位、推定社區、估算未拆價車位
+4. 產生網站資料、部署到 GitHub Pages；每次的資料報告在 [reports/pipeline_report.md](reports/pipeline_report.md)
 
-### 看結果（手機也可以）
+**不需要任何金鑰**：實價登錄、門牌坐標都是免申請的政府開放資料；預售建案補位置用 OpenStreetMap。
 
-1. 打開 repo 頁面，點上方的 **Actions**
-2. 點最新一筆「第一步：連線測試與資料檢查」
-3. 往下捲到 **Summary**，報告就在那裡
-4. 報告也會自動存成 `reports/step1_report.md`
+## 需要你手動做的事
 
-綠色勾勾＝程式正常跑完；報告第一張表會寫「連得到」或「被擋」。
+### 第一次：開啟 GitHub Pages（只做一次，約 1 分鐘）
 
-### 手動再跑一次
+1. 電腦瀏覽器打開 https://github.com/nonechen-collab/taoyuan-real-price-map
+2. 點上方 **Settings**（齒輪）
+3. 左側點 **Pages**
+4. **Build and deployment → Source** 下拉選 **GitHub Actions**（不用按儲存，選了就生效）
+5. 點上方 **Actions** → 左側「更新資料並部署網站」→ 右側 **Run workflow** → 綠色 **Run workflow**
+6. 約 5 分鐘後，手機打開 https://nonechen-collab.github.io/taoyuan-real-price-map/
 
-Actions → 左側點「第一步：連線測試與資料檢查」→ 右側 **Run workflow** → 再按一次綠色 **Run workflow**。
+### 收到「資料更新異常」Issue 時
 
-## 第一次建立 repo（自己上傳的步驟）
+- 多半是內政部網站暫時連不上，下一次排程會自動重試，網站照常顯示舊資料
+- 連續好幾次都失敗，再請 Claude Code 處理（可改在自己電腦下載後推送）
 
-用電腦瀏覽器操作比較順手：
+### 手動合併或拆分社區
 
-1. 登入 github.com，點右上角 **＋** → **New repository**
-2. Repository name 填 `taoyuan-real-price-map`，選 **Public**，其他不用勾，按 **Create repository**
-3. 在新 repo 頁面點 **uploading an existing file**
-4. 把解壓後資料夾裡的所有東西（含 `.github` 資料夾）一起拖進網頁
-5. 按 **Commit changes**，約 3–5 分鐘後到 Actions 看結果
+推定社區偶爾會把兩個社區合在一起或拆開。在 `data/manual/communities.csv` 加一行「門牌鍵,社區代號,社區名稱」（門牌鍵在成交卡片展開後的「原始欄位」），推送後下次建置生效。
 
-> 為什麼要 Public：GitHub 免費方案只有公開 repo 能用 GitHub Pages 架網站。資料本來就是政府公開資料，金鑰之後會放在 Secrets，不會外流。
+### 調整特殊交易關鍵字
 
-## 在自己電腦上跑（GitHub 被內政部擋下時的備案）
+改 `pipeline/special_keywords.csv`（旗標、關鍵字用 `|` 分隔、預設排除 是／否），推送後自動重建。
 
-1. 到 python.org 下載安裝 Python 3.10 以上；Windows 安裝時勾選「Add python.exe to PATH」
-2. 在專案資料夾空白處按右鍵 →「在終端機中開啟」
-3. 輸入 `python scripts/step1_probe.py` 按 Enter
-4. 結果在 `reports/step1_report.md`
+## 在自己電腦上執行（開發用）
 
-已經手動下載好 zip 的話，可以改用 `python scripts/step1_probe.py --local 檔案.zip`，不必連網。
+需要 Python 3.10 以上、Node.js 20 以上。
+
+```bash
+python -m pipeline.periods update
+```
+
+```bash
+python -m pipeline.build
+```
+
+```bash
+python -m unittest discover -s tests -t .
+```
+
+```bash
+cd web && npm install && npm run dev
+```
+
+開發網址：http://localhost:5173/taoyuan-real-price-map/
+
+> Windows 11 若開啟「智慧型應用程式控制」，會擋下建置工具 rolldown 的原生元件，改裝 WebAssembly 版即可（不必改安全設定）：在 `web` 資料夾執行 `npm install --no-save --force @rolldown/binding-wasm32-wasi@<rolldown 版本>`。
 
 ## 專案結構
 
 ```
-SPEC.md                              需求規格、決策紀錄、進度紀錄
-scripts/step1_probe.py               第一步：連線測試＋資料檢查（只用 Python 標準函式庫）
-.github/workflows/step1-probe.yml    在 GitHub Actions 執行第一步
-reports/                             產出的報告（自動存回 repo）
-data/raw/                            下載的原始檔（不進 repo）
+SPEC.md                       需求規格、決策紀錄、進度紀錄
+CLAUDE.md                     給 Claude Code 的交接檔
+pipeline/                     資料管線（只用 Python 標準函式庫）
+  periods.py                    下載內政部資料、存期別 zip
+  update.py                     排程入口：下載＋筆數異常檢查
+  clean.py                      清理（民國日期、國字樓層、面積、單價、公設比、地址）
+  rules.py, special_keywords.csv 特殊交易旗標
+  doorplate.py                  桃園市門牌坐標：下載、索引、TWD97→WGS84
+  geocode.py                    定位（門牌、交叉口推算、OSM）與快取
+  community.py                  推定社區
+  build.py                      主流程：輸出前端資料與報告
+  checksize.py, verify.py       檔案大小檢查、驗收抽樣
+tests/test_clean.py           清理模組單元測試（真實樣本）
+data/periods/                 每期桃園原始檔（只新增）
+data/geocode_cache.csv        定位快取（只新增）
+data/manual/                  手動修正（社區合併／拆分）
+web/                          前端（React + Vite + TypeScript + MapLibre GL JS，PWA）
+reports/                      第一步報告、每次資料報告、驗收抽樣
+docs/                         研究摘要、資料字典
+.github/workflows/            update-data.yml（排程＋部署）、step1-probe.yml（連線測試）
 ```
 
 ## 資料來源與授權
 
-內政部不動產成交案件實際資訊資料供應系統（https://plvr.land.moi.gov.tw/DownloadOpenData），依「政府資料開放授權條款－第1版」使用。
+- 內政部不動產成交案件實際資訊資料供應系統（https://plvr.land.moi.gov.tw/DownloadOpenData），政府資料開放授權條款－第1版
+- 桃園市政府民政局「桃園市門牌位置坐標資料」（https://data.gov.tw/dataset/157689），政府資料開放授權條款－第1版
+- 預售建案部分位置：© OpenStreetMap 貢獻者（ODbL）
+- 底圖：內政部國土測繪中心 通用版電子地圖
+
+本網站為個人整理，數字以內政部實價登錄網站為準。

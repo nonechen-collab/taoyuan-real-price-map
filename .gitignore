@@ -7,3 +7,12 @@ __pycache__/
 
 # 個人資訊（不上傳）
 CLAUDE.local.md
+
+# 本機開發設定（含電腦路徑，不上傳）
+.claude/
+
+# 前端
+web/node_modules/
+web/dist/
+web/public/data/
+web/public/maplibre-gl-worker.mjs

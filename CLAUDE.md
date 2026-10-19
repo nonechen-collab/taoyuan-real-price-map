@@ -25,13 +25,15 @@
 - Windows 終端機輸出預設不是 UTF-8：Python 腳本開頭要把 stdout 改成 UTF-8（step1_probe.py 已處理）
 - 內政部憑證鏈過不了 Python 3.13 起的嚴格檢查：只關掉 VERIFY_X509_STRICT，不可關閉憑證驗證（step1_probe.py 已處理）
 
-## 目前進度（2026-10-18 本機 Claude Code）
-- Python 3.13.15 已用 winget 裝在使用者帳號下（`%LOCALAPPDATA%\Programs\Python\Python313`，已加進 PATH）；Git 2.54；沒有 gh CLI（查 GitHub 狀態用公開 API，未登入每小時 60 次）
-- GitHub 公開 repo 已建立並推送：https://github.com/nonechen-collab/taoyuan-real-price-map ；git 身分已設成 GitHub 隱藏信箱（repo 本地設定）
-- 第一步完成：本機與 GitHub Actions 都能下載內政部資料，結論已填進 SPEC 決策紀錄；`reports/step1_report.md` 是 Actions 版報告（Actions 會把報告 commit 回 repo，本機改檔前先 `git pull --rebase`）
-- 「前期下載」網址可補季檔缺口：`DownloadHistory?type=history&fileName=20261001`；10/1 那期已存於 `data/raw/_downloads/20261001.zip`（不進 repo）
+## 目前進度（2026-10-19）
+- 本機工具：Python 3.13.15（`%LOCALAPPDATA%\Programs\Python\Python313`）、Node.js 24.22.0（`%LOCALAPPDATA%\Programs\nodejs`），都在使用者 PATH；沒有 gh CLI
+- Windows「智慧型應用程式控制」會擋 rolldown 原生 .node：本機要 `npm install --no-save --force @rolldown/binding-wasm32-wasi@<rolldown版本>`（npm 安裝或移除套件後會被清掉，要再裝一次）；不可要求使用者關閉安全設定
+- 預覽：`.claude/launch.json` 的 web 設定；內建瀏覽器面板隱藏時 requestAnimationFrame 不會執行，網址加 `?raf`（只在開發模式有效）可強制繪製地圖
+- Phase 1 程式完成：`pipeline/`（下載、清理、定位、社區、輸出）、`web/`（React＋MapLibre PWA）、`.github/workflows/update-data.yml`（排程＋Pages 部署）
+- 地理編碼：桃園市門牌坐標開放資料（買賣 99.5% 棟級命中）；OSM Overpass 最近常逾時，預售約 11% 建案尚未定位，排程會逐次補
+- GitHub Pages 需使用者手動開啟（Settings → Pages → Source 選 GitHub Actions）
 
 ## 下一步（照順序）
-1. 第一步已由使用者確認（2026-10-19）；室內坪／公設比、預售交屋、特殊交易清單已定案寫進 SPEC「資料清理」
-2. 等使用者決定地理編碼來源：建議改用桃園市門牌位置坐標開放資料（研究與實測見 docs/research-2026-10.md §4.1）；定案後改寫 SPEC「地理編碼」一節
-3. 之後才進 Phase 1；管線每次要下載「本期＋前期」，避免漏期
+1. 確認使用者已開啟 GitHub Pages，第一次部署成功，手機能開網址
+2. 使用者用手機驗收 Phase 1（驗收清單在最後一次回報），收集問題修正
+3. 使用者確認後才進 Phase 2；Phase 2 驗收樣本「璞園安彊」「君邑中運路案」在近 3 年資料中查無，需回補 2012 年起歷史資料（Phase 2 項目）

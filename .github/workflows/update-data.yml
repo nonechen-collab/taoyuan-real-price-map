@@ -1,0 +1,127 @@
+# 每月 2、12、22 日台灣時間 10:00：下載實價登錄新期別 → 清理、定位 → 部署網站到 GitHub Pages。
+# 改程式推送到 main 時也會重新建置部署（不下載新期別）；也可以在 Actions 頁面手動執行。
+name: 更新資料並部署網站
+
+on:
+  schedule:
+    - cron: "0 2 2,12,22 * *" # UTC 02:00 ＝ 台灣 10:00
+  workflow_dispatch:
+    inputs:
+      fetch:
+        description: "下載內政部新期別"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths:
+      - "pipeline/**"
+      - "web/**"
+      - "tests/**"
+      - "data/manual/**"
+      - ".github/workflows/update-data.yml"
+
+permissions:
+  contents: write # 存回新期別與定位快取
+  issues: write # 異常時開 Issue
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: 取得程式
+        uses: actions/checkout@v7
+
+      - name: 清理模組單元測試
+        run: python3 -m unittest discover -s tests -t . -v
+
+      - name: 下載新期別並檢查筆數
+        id: update
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.fetch)
+        run: |
+          set +e
+          python3 -m pipeline.update
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: 異常時開 GitHub Issue 通知
+        if: steps.update.outputs.code == '2' || steps.update.outputs.code == '3'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create 資料更新 --color d73a4a --description "排程下載或筆數異常" --force >/dev/null 2>&1 || true
+          existing=$(gh issue list --state open --label 資料更新 --json number --jq '.[0].number')
+          echo "" >> reports/update_alert.md
+          echo "執行紀錄：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> reports/update_alert.md
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file reports/update_alert.md
+          else
+            gh issue create --title "資料更新異常 $(TZ=Asia/Taipei date +%Y-%m-%d)" --label 資料更新 --body-file reports/update_alert.md
+          fi
+
+      - name: 筆數異常：保留舊網站，停止
+        if: steps.update.outputs.code == '3'
+        run: |
+          echo "::error::新期別筆數異常，已保留舊資料，詳見 Issue"
+          exit 1
+
+      - name: 清理、定位、輸出前端資料
+        run: python3 -m pipeline.build
+
+      - name: 檢查前端資料大小
+        run: python3 -m pipeline.checksize
+
+      - name: 報告顯示在執行摘要
+        if: always()
+        run: |
+          [ -f reports/pipeline_report.md ] && cat reports/pipeline_report.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: 存回新期別、定位快取與報告
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/periods data/geocode_cache.csv reports/pipeline_report.md reports/pipeline_summary.json
+          if git diff --cached --quiet; then
+            echo "沒有新資料要存回"
+          else
+            git commit -m "資料更新 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+            git pull --rebase
+            git push
+          fi
+
+      - name: 安裝 Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 建置網站
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: 設定 GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: 上傳網站
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
