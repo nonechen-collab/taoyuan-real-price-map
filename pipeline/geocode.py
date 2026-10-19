@@ -54,7 +54,8 @@ class Cache:
         rows = self.rows.get(key)
         if not rows:
             return None
-        return min(rows, key=lambda r: (int(r["精度"]), [-ord(c) for c in r["日期"]]))
+        # 精度相同時取最後寫入的一筆（檔案只新增，越後面越新）
+        return min(enumerate(rows), key=lambda ir: (int(ir[1]["精度"]), -ir[0]))[1]
 
     def needs(self, key, doorplate_month):
         b = self.best(key)
