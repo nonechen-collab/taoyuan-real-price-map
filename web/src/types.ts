@@ -6,24 +6,34 @@ export interface FlagDef {
   note?: string;
 }
 
-export interface DistrictMeta {
-  code: string;
-  name: string;
+export interface PartMeta {
+  key: "r" | "o"; // r 近 12 月、o 更早（近 3 年內）
+  label: string;
   n: number;
   file: string;
   detail: string;
   bytes: number;
+}
+
+export interface DistrictMeta {
+  code: string;
+  name: string;
+  n: number;
+  parts: PartMeta[];
   lat: number | null;
   lon: number | null;
 }
 
 export interface Meta {
+  version: number;
   generated: string;
   range: { from: string; to: string };
+  split: string; // 近 12 月的起日（yyyy-mm-dd），更早的資料另檔按需載入
   latest: { name: string; text: string; saleTo: number; presaleTo: number } | null;
   periods: string[];
-  counts: { total: number; a: number; b: number; located: number };
+  counts: { total: number; a: number; b: number; located: number; recent: number };
   fields: string[];
+  commFields: string[];
   detailFields: string[];
   flags: FlagDef[];
   defaultExclude: number;
@@ -42,6 +52,7 @@ export interface Tx {
   id: string;
   kind: 0 | 1; // 0 買賣、1 預售
   district: string; // 行政區代碼
+  part: "r" | "o"; // 來自哪個資料段（原始欄位要到同一段的明細檔找）
   date: number; // yyyymmdd
   ym: number; // yyyymm
   lat: number | null;

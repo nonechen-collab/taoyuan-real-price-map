@@ -36,13 +36,23 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
-            // 成交資料：有網路就拿新的，離線時用上次載入的
-            urlPattern: ({ url }) => url.pathname.includes("/data/") && url.pathname.endsWith(".json"),
+            // 期別資訊：每次先問伺服器有沒有新版，網路慢或離線時用上次的
+            urlPattern: ({ url }) => url.pathname.endsWith("/data/meta.json"),
             handler: "NetworkFirst",
             options: {
-              cacheName: "lvr-data",
-              networkTimeoutSeconds: 8,
-              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              cacheName: "lvr-meta",
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 90 },
+            },
+          },
+          {
+            // 成交與明細：檔名含內容版本碼，內容不會變 → 直接用手機快取；資料更新時檔名會換
+            urlPattern: ({ url }) => /\/data\/(tx|detail)\/[^/]+\.[0-9a-f]{8}\.json$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "lvr-data-v2",
+              expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 180 },
+              cacheableResponse: { statuses: [200] },
             },
           },
           {

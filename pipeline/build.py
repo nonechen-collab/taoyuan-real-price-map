@@ -10,9 +10,11 @@ import bisect
 import collections
 import csv
 import datetime as dt
+import hashlib
 import io
 import json
 import re
+import shutil
 import statistics
 import sys
 import zipfile
@@ -312,71 +314,114 @@ def _r(v, n):
     return None if v is None else round(v, n)
 
 
-def write_outputs(recs, comm_info, proj_info, plist, flags, t0):
-    out = config.OUT_DIR
-    (out / "tx").mkdir(parents=True, exist_ok=True)
-    (out / "detail").mkdir(parents=True, exist_ok=True)
-    today = t0.date()
-    since = today.replace(year=today.year - config.RECENT_YEARS)
-    recent = [r for r in recs if r["date"] >= since]
+COMM_FIELDS = ["id", "name", "district", "lat", "lon", "built", "floors", "buildings", "presale"]
+PARTS = (("r", "近 12 月"), ("o", "更早（近 3 年內）"))
 
+
+def _months_ago(d, months):
+    """d 往前推 months 個月的同一天（月底不存在就取當月最後一天）；與前端「近 N 月」同規則"""
+    y, m = d.year, d.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    for day in (d.day, 30, 29, 28):
+        try:
+            return dt.date(y, m, day)
+        except ValueError:
+            continue
+
+
+def _write_hashed(folder, stem, obj):
+    """寫成 <stem>.<內容雜湊8碼>.json：內容不變檔名就不變，手機可以長期快取"""
+    data = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    name = f"{stem}.{hashlib.sha1(data).hexdigest()[:8]}.json"
+    (folder / name).write_bytes(data)
+    return name, len(data)
+
+
+def _tx_row(r, district, lidx):
+    a = r["areas"]
+    return [
+        r["id"], 0 if r["kind"] == "a" else 1, int(r["date"].strftime("%Y%m%d")),
+        _r(r["lat"], 5), _r(r["lon"], 5), r["level"], short_addr(r["addr"], district), lidx.get(r.get("cid"), -1),
+        BTYPES.index(r["btype"]), r["floor"], r["total_floors"], _r(r["age"], 1),
+        r["rooms"], r["halls"], r["baths"],
+        _r(r["total"] / 10000, 1), _r(r["unit"], 2), _r(a["ping"], 1), _r(a["indoor"], 1), _r(a["public_ratio"], 2),
+        r["park_n"], PARK_TYPES.index(r["park_type"]) if r["park_type"] in PARK_TYPES else -1,
+        _r(r["park_price_eff"] / 10000, 1) if r["park_n"] else None,
+        _r(r["park_area_eff"] * clean.PING, 1) if r["park_n"] else None,
+        None if r["elevator"] is None else int(r["elevator"]), r["mask"], r["unit_no"] or None,
+    ]
+
+
+def _detail_row(r):
+    d, g = r["raw"], r["geo"] or {}
+    return [d.get(k, "") for k in DETAIL_FIELDS[:18]] + [
+        r["period"], r.get("bkey") or "", g.get("來源", ""), g.get("對應門牌", ""), r["park_basis"]]
+
+
+def _comm_row(ci):
+    return [ci["id"], ci["name"], ci["district"], _r(ci["lat"], 5), _r(ci["lon"], 5),
+            ci.get("built"), ci.get("floors"), ci.get("buildings"), 1 if ci.get("presale") else 0]
+
+
+def write_outputs(recs, comm_info, proj_info, plist, flags, t0):
+    """前端資料：每區拆「近 12 月」與「更早」兩檔（各自帶用到的社區），檔名含內容雜湊。
+    前端先載近 12 月（預設期間），選「近 3 年」或自訂更早期間時才載更早的檔。"""
+    out = config.OUT_DIR
+    for sub in ("tx", "detail"):  # 檔名有版本碼，舊檔不刪會越積越多
+        shutil.rmtree(out / sub, ignore_errors=True)
+        (out / sub).mkdir(parents=True, exist_ok=True)
+    (out / "communities.json").unlink(missing_ok=True)  # 舊版格式，社區已併入各區檔
+    today = t0.date()
+    since = _months_ago(today, 12 * config.RECENT_YEARS)
+    recent = [r for r in recs if r["date"] >= since]
+    latest = max(r["date"] for r in recent)
+    split = _months_ago(latest, 12)
     comms = {**comm_info, **proj_info}
-    used = sorted({r.get("cid") for r in recent if r.get("cid")})
-    cidx = {c: i for i, c in enumerate(used)}
-    comm_list = []
-    for c in used:
-        ci = comms[c]
-        comm_list.append([c, ci["name"], ci["district"], _r(ci["lat"], 6), _r(ci["lon"], 6),
-                          ci.get("built"), ci.get("floors"), ci.get("buildings"), 1 if ci.get("presale") else 0])
 
     by_d = collections.defaultdict(list)
     for r in recent:
         by_d[r["district"]].append(r)
-    dist_meta, sizes = [], {}
+    dist_meta, sizes, n_comm = [], {}, set()
     for name, rs in sorted(by_d.items(), key=lambda kv: -len(kv[1])):
         code = config.DISTRICT_CODE.get(name, name)
         rs.sort(key=lambda r: r["date"], reverse=True)
-        rows, detail = [], {}
-        for r in rs:
-            a = r["areas"]
-            rows.append([
-                r["id"], 0 if r["kind"] == "a" else 1, int(r["date"].strftime("%Y%m%d")),
-                _r(r["lat"], 6), _r(r["lon"], 6), r["level"], short_addr(r["addr"], name), cidx.get(r.get("cid"), -1),
-                BTYPES.index(r["btype"]), r["floor"], r["total_floors"], _r(r["age"], 1),
-                r["rooms"], r["halls"], r["baths"],
-                _r(r["total"] / 10000, 1), _r(r["unit"], 2), _r(a["ping"], 2), _r(a["indoor"], 2), _r(a["public_ratio"], 3),
-                r["park_n"], PARK_TYPES.index(r["park_type"]) if r["park_type"] in PARK_TYPES else -1,
-                _r(r["park_price_eff"] / 10000, 1) if r["park_n"] else None,
-                _r(r["park_area_eff"] * clean.PING, 2) if r["park_n"] else None,
-                None if r["elevator"] is None else int(r["elevator"]), r["mask"], r["unit_no"] or None,
-            ])
-            d = r["raw"]
-            g = r["geo"] or {}
-            detail[r["id"]] = [d.get(k, "") for k in DETAIL_FIELDS[:18]] + [
-                r["period"], r.get("bkey") or "", g.get("來源", ""), g.get("對應門牌", ""), r["park_basis"]]
-        tx_path, det_path = out / "tx" / f"{code}.json", out / "detail" / f"{code}.json"
-        _dump(tx_path, {"fields": FIELDS, "rows": rows})
-        _dump(det_path, {"fields": DETAIL_FIELDS, "rows": detail})
-        sizes[name] = (tx_path.stat().st_size, det_path.stat().st_size)
+        parts, size = [], [0, 0]
+        for key, label in PARTS:
+            sub = [r for r in rs if (r["date"] >= split) == (key == "r")]
+            local = sorted({r.get("cid") for r in sub if r.get("cid")})
+            n_comm.update(local)
+            lidx = {c: i for i, c in enumerate(local)}
+            tx_name, tx_bytes = _write_hashed(out / "tx", f"{code}.{key}", {
+                "fields": FIELDS, "commFields": COMM_FIELDS,
+                "comms": [_comm_row(comms[c]) for c in local], "rows": [_tx_row(r, name, lidx) for r in sub]})
+            det_name, det_bytes = _write_hashed(out / "detail", f"{code}.{key}", {
+                "fields": DETAIL_FIELDS, "rows": {r["id"]: _detail_row(r) for r in sub}})
+            parts.append({"key": key, "label": label, "n": len(sub), "file": f"tx/{tx_name}",
+                          "detail": f"detail/{det_name}", "bytes": tx_bytes})
+            size[0] += tx_bytes
+            size[1] += det_bytes
+        sizes[name] = tuple(size)
         pts = [(r["lat"], r["lon"]) for r in rs if r["lat"] is not None]
-        dist_meta.append({"code": code, "name": name, "n": len(rows), "file": f"tx/{code}.json",
-                          "detail": f"detail/{code}.json", "bytes": sizes[name][0],
+        dist_meta.append({"code": code, "name": name, "n": len(rs), "parts": parts,
                           "lat": round(statistics.median(p[0] for p in pts), 4) if pts else None,
                           "lon": round(statistics.median(p[1] for p in pts), 4) if pts else None})
-    _dump(out / "communities.json", {"fields": ["id", "name", "district", "lat", "lon", "built", "floors", "buildings", "presale"],
-                                     "rows": comm_list})
     _dump(out / "stats_quarterly.json", quarterly(recs, flags))
     latest_issue = max((p for p in plist if p["kind"] == "issue"), key=lambda p: p.get("sale_to") or 0, default=None)
     meta = {
+        "version": 2,
         "generated": t0.isoformat(timespec="seconds"),
-        "range": {"from": since.isoformat(), "to": max(r["date"] for r in recent).isoformat()},
+        "range": {"from": since.isoformat(), "to": latest.isoformat()},
+        "split": split.isoformat(),
         "latest": {"name": latest_issue["name"], "text": latest_issue.get("text", ""),
                    "saleTo": latest_issue.get("sale_to"), "presaleTo": latest_issue.get("presale_to")} if latest_issue else None,
         "periods": [p["name"] for p in plist],
         "counts": {"total": len(recent), "a": sum(1 for r in recent if r["kind"] == "a"),
                    "b": sum(1 for r in recent if r["kind"] == "b"),
-                   "located": sum(1 for r in recent if r["lat"] is not None)},
-        "fields": FIELDS, "detailFields": DETAIL_FIELDS,
+                   "located": sum(1 for r in recent if r["lat"] is not None),
+                   "recent": sum(1 for r in recent if r["date"] >= split)},
+        "fields": FIELDS, "commFields": COMM_FIELDS, "detailFields": DETAIL_FIELDS,
         "flags": [{"bit": i, **t} for i, t in enumerate(flags.table)],
         "defaultExclude": flags.default_exclude_mask(),
         "btypes": BTYPES, "defaultBtypes": [BTYPES.index(b) for b in DEFAULT_BTYPES],
@@ -384,7 +429,7 @@ def write_outputs(recs, comm_info, proj_info, plist, flags, t0):
         "districts": dist_meta, "sources": SOURCES,
     }
     _dump(out / "meta.json", meta, indent=1)
-    return {"recent": len(recent), "districts": dist_meta, "sizes": sizes, "communities": len(comm_list)}
+    return {"recent": len(recent), "districts": dist_meta, "sizes": sizes, "communities": len(n_comm)}
 
 
 def short_addr(addr, district):

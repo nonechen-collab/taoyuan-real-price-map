@@ -91,7 +91,7 @@ function TxDetail({ t, meta }: { t: Tx; meta: Meta }) {
   const [d, setD] = useState<Record<string, string> | null | undefined>(undefined);
   useEffect(() => {
     let alive = true;
-    loadDetail(meta, t.district, t.id)
+    loadDetail(meta, t)
       .then((r) => alive && setD(r))
       .catch(() => alive && setD(null));
     return () => {

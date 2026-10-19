@@ -23,13 +23,14 @@ def load_front():
     meta = json.loads((config.OUT_DIR / "meta.json").read_text(encoding="utf-8"))
     rows, details = [], {}
     for d in meta["districts"]:
-        t = json.loads((config.OUT_DIR / d["file"]).read_text(encoding="utf-8"))
-        det = json.loads((config.OUT_DIR / d["detail"]).read_text(encoding="utf-8"))
-        f = {k: i for i, k in enumerate(t["fields"])}
-        for r in t["rows"]:
-            rows.append({k: r[f[k]] for k in FIELDS} | {"district": d["name"]})
-        for k, v in det["rows"].items():
-            details[k] = dict(zip(det["fields"], v))
+        for part in d["parts"]:
+            t = json.loads((config.OUT_DIR / part["file"]).read_text(encoding="utf-8"))
+            det = json.loads((config.OUT_DIR / part["detail"]).read_text(encoding="utf-8"))
+            f = {k: i for i, k in enumerate(t["fields"])}
+            for r in t["rows"]:
+                rows.append({k: r[f[k]] for k in FIELDS} | {"district": d["name"]})
+            for k, v in det["rows"].items():
+                details[k] = dict(zip(det["fields"], v))
     return meta, rows, details
 
 
@@ -47,7 +48,7 @@ def part_a(rows, details, rng):
         unit_off = clean.num(d["單價元平方公尺"]) or 0
         park_price = clean.num(d["車位總價元"]) or 0
         ping_all = (r["pg"] or 0) + (r["pa"] or 0)
-        checks = [abs(r["tp"] - tp_off / 1e4) < 0.06, abs(ping_all - area * clean.PING) < 0.06]
+        checks = [abs(r["tp"] - tp_off / 1e4) < 0.06, abs(ping_all - area * clean.PING) < 0.11]  # 坪數存到 0.1 坪
         if r["pn"] and park_price == 0:
             verdict = "車位未拆價：本站估算扣除，與官方不同屬預期"
             checks.append(True)

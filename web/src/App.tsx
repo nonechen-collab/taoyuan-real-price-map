@@ -5,7 +5,7 @@ import FilterDrawer from "./components/FilterDrawer";
 import StatsCard from "./components/StatsCard";
 import TxCard from "./components/TxCard";
 import { About, LayerMenu, Legend } from "./components/Overlays";
-import { loadCommunities, loadDistrict, loadMeta } from "./data";
+import { loadMeta, loadPart, newRegistry } from "./data";
 import {
   PERIOD_LABEL, activeCount, defaultFilters, filtersFromParams, filtersToParams, makeCtx, pass, type Filters,
 } from "./filters";
@@ -60,7 +60,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [comms, setComms] = useState<Community[]>([]);
   const [all, setAll] = useState<Tx[]>([]);
-  const [loaded, setLoaded] = useState(0);
+  const [loaded, setLoaded] = useState(0); // 已載入「近 12 月」的區數
+  const [oldLoaded, setOldLoaded] = useState(0); // 已載入「更早」的區數
+  const [oldState, setOldState] = useState<"idle" | "loading" | "done">("idle");
+  const [wantOld, setWantOld] = useState(false); // 網址帶的成交／社區不在近 12 月時要載更早資料
+  const reg = useRef(newRegistry());
+  const nextIdx = useRef(0);
+  const order = useRef<Meta["districts"]>([]);
   const [filters, setFilters] = useState<Filters | null>(null);
   const [scope, setScope] = useState<Scope>({ kind: "view" });
   const [view, setView] = useState<ViewState | null>(null);
@@ -105,7 +111,7 @@ export default function App() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  // ── 載入：meta → 社區 → 各區（離目前位置近的先載） ──
+  // ── 載入：meta → 各區「近 12 月」（離目前位置近的先載）；「更早」按需載入 ──
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -129,19 +135,18 @@ export default function App() {
           const pts = sp.split(";").map(parseLL).filter((x): x is LngLat => !!x);
           if (pts.length >= 3) setScope({ kind: "polygon", points: pts });
         }
-        // 社區清單與各區成交同時下載；各區依與起始位置的距離排序（近的先載）
-        loadCommunities()
-          .then((cs) => alive && setComms(cs))
-          .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
         const start = initial.current.center;
         const dist = (d: (typeof m.districts)[number]) => (d.lat != null && d.lon != null ? distance(start, [d.lon, d.lat]) : 1e9);
-        const order = [...m.districts].sort((a, b) => dist(a) - dist(b));
-        let next = 0;
-        for (const d of order) {
-          const txs = await loadDistrict(d, next);
-          if (!alive) return;
-          next += txs.length;
-          setAll((prev) => prev.concat(txs));
+        order.current = [...m.districts].sort((a, b) => dist(a) - dist(b));
+        for (const d of order.current) {
+          const part = d.parts.find((x) => x.key === "r");
+          if (part) {
+            const txs = await loadPart(d, part, nextIdx.current, reg.current);
+            if (!alive) return;
+            nextIdx.current += txs.length;
+            setAll((prev) => prev.concat(txs));
+            setComms([...reg.current.list]);
+          }
           setLoaded((n) => n + 1);
         }
       } catch (e) {
@@ -155,6 +160,42 @@ export default function App() {
 
   const defaults = useMemo(() => (meta ? defaultFilters(meta) : null), [meta]);
   const latest = useMemo(() => (meta ? Number(meta.range.to.replaceAll("-", "")) : 0), [meta]);
+  const recentDone = !!meta && loaded === meta.districts.length;
+  const oldDone = oldState === "done";
+
+  // 選「近 3 年」或自訂到更早的期間時，才下載各區「更早」的資料
+  const needOld = useMemo(() => {
+    if (!meta || !filters) return false;
+    const split = Number(meta.split.replaceAll("-", ""));
+    if (filters.period === "3y") return true;
+    if (filters.period === "custom") return filters.from == null || filters.from * 100 + 31 < split;
+    return false;
+  }, [meta, filters]);
+
+  useEffect(() => {
+    if (!(needOld || wantOld) || !recentDone || oldState !== "idle") return;
+    setOldState("loading");
+    // 一旦開始就載完（使用者中途切回近 12 月也不中斷，否則狀態會卡在載入中）
+    (async () => {
+      try {
+        for (const d of order.current) {
+          const part = d.parts.find((x) => x.key === "o");
+          if (part) {
+            const txs = await loadPart(d, part, nextIdx.current, reg.current);
+            nextIdx.current += txs.length;
+            setAll((prev) => prev.concat(txs));
+            setComms([...reg.current.list]);
+          }
+          setOldLoaded((n) => n + 1);
+        }
+        setOldState("done");
+      } catch {
+        setToast("更早的資料載入失敗，請稍後再試");
+        setOldState("idle");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needOld, wantOld, recentDone]);
 
   // ── 篩選 ──
   const filtered = useMemo(() => {
@@ -176,19 +217,23 @@ export default function App() {
 
   // 網址帶的社區、成交：資料載入後還原
   useEffect(() => {
-    if (pendingComm.current && comms.length) {
-      const c = comms.find((x) => x.id === pendingComm.current);
-      if (c) setScope({ kind: "community", cid: c.i });
+    if (!pendingComm.current || !recentDone) return;
+    const i = reg.current.byId.get(pendingComm.current);
+    if (i !== undefined) {
+      setScope({ kind: "community", cid: i });
       pendingComm.current = null;
-    }
-  }, [comms]);
+    } else if (oldDone) pendingComm.current = null;
+    else setWantOld(true);
+  }, [comms, recentDone, oldDone]);
   useEffect(() => {
-    if (pendingTx.current && meta && loaded === meta.districts.length) {
-      const t = all.find((x) => x.id === pendingTx.current);
-      if (t) setSelected(t.i);
+    if (!pendingTx.current || !recentDone) return;
+    const t = all.find((x) => x.id === pendingTx.current);
+    if (t) {
+      setSelected(t.i);
       pendingTx.current = null;
-    }
-  }, [all, loaded, meta]);
+    } else if (oldDone) pendingTx.current = null;
+    else setWantOld(true);
+  }, [all, recentDone, oldDone]);
 
   // ── 範圍內的成交（列表與統計） ──
   const dist = useMemo(() => {
@@ -428,6 +473,9 @@ export default function App() {
           </button>
         )}
         {loading && meta && <span className="muted small">載入 {loaded}/{meta.districts.length} 區</span>}
+        {!loading && oldState === "loading" && meta && (
+          <span className="muted small">載入更早資料 {oldLoaded}/{meta.districts.length} 區</span>
+        )}
       </div>
       <StatsCard s={summary} loading={loading} />
     </div>
