@@ -174,6 +174,6 @@ repo 結構說明、中文 README（含我要手動做的步驟）、.env.exampl
 | 階段 | 狀態 | 測試網址 | 備註 |
 |---|---|---|---|
 | 第一步 | ✅ 完成（使用者 2026-10-18 確認） | https://github.com/nonechen-collab/taoyuan-real-price-map/actions | 2026-10-18 本機與 GitHub Actions 都下載成功；reports/step1_report.md 為 Actions 版報告 |
-| Phase 1 | 完成，待使用者驗收 | https://nonechen-collab.github.io/taoyuan-real-price-map/ | 2026-10-19：13 季＋2 期資料、買賣 99.5% 棟級定位、單元測試 31 項、驗收抽樣見 reports/phase1_verify.md；需先在 GitHub 開啟 Pages |
+| Phase 1 | ✅ 完成（使用者 2026-10-20 手機驗收通過） | https://nonechen-collab.github.io/taoyuan-real-price-map/ | 13 季＋本期資料、買賣 99.5% 棟級定位、單元測試 31 項、驗收抽樣見 reports/phase1_verify.md；首屏載入加速後再次開啟約 0.5 秒 |
 | Phase 2 | 未開始 | | |
 | Phase 3 | 未開始 | | |
