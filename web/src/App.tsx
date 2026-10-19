@@ -42,6 +42,18 @@ function save(key: string, v: unknown) {
   }
 }
 
+/** 同一個分頁只自動重新載入一次，避免一直重整 */
+function reloadOnce(): boolean {
+  try {
+    if (sessionStorage.getItem("autoReloaded")) return false;
+    sessionStorage.setItem("autoReloaded", "1");
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
+}
+
 function parseLL(s: string | null): LngLat | null {
   if (!s) return null;
   const [lat, lon] = s.split(",").map(Number);
@@ -150,7 +162,11 @@ export default function App() {
           setLoaded((n) => n + 1);
         }
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (!alive) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        // 找不到檔案或格式不符，多半是手機裡的舊程式遇到新版資料：同一次瀏覽自動重新載入一次
+        if (/HTTP 404|格式已更新/.test(msg) && reloadOnce()) return;
+        setError(msg);
       }
     })();
     return () => {
