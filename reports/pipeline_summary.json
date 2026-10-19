@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-19T15:16:50+08:00",
+ "generated": "2026-10-19T15:28:16+08:00",
  "periods": [
   {
    "name": "season-112S3",
@@ -101,7 +101,7 @@
  "geocode": {
   "cached": 49207,
   "new": 0,
-  "osm": 10,
+  "osm": 11,
   "osm_deferred": 139,
   "doorplate_month": "11509",
   "buildings": {
