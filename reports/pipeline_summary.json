@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-19T14:45:14+08:00",
+ "generated": "2026-10-19T15:02:05+08:00",
  "periods": [
   {
    "name": "season-112S3",
@@ -99,8 +99,8 @@
   "純車位": 1638
  },
  "geocode": {
-  "cached": 49201,
-  "new": 6,
+  "cached": 49207,
+  "new": 0,
   "osm": 7,
   "osm_deferred": 139,
   "doorplate_month": "11509",
