@@ -31,9 +31,10 @@
 - 預覽：`.claude/launch.json` 的 web 設定；內建瀏覽器面板隱藏時 requestAnimationFrame 不會執行，網址加 `?raf`（只在開發模式有效）可強制繪製地圖
 - Phase 1 程式完成：`pipeline/`（下載、清理、定位、社區、輸出）、`web/`（React＋MapLibre PWA）、`.github/workflows/update-data.yml`（排程＋Pages 部署）
 - 地理編碼：桃園市門牌坐標開放資料（買賣 99.5% 棟級命中）；OSM Overpass 最近常逾時，預售約 11% 建案尚未定位，排程會逐次補
-- GitHub Pages 需使用者手動開啟（Settings → Pages → Source 選 GitHub Actions）
+- GitHub Pages 已開啟（2026-10-19），第一次部署成功：https://nonechen-collab.github.io/taoyuan-real-price-map/
+- 已知效能問題：首屏要等社區清單（439 KB）與第一區成交（925 KB），本機實測 12 秒才出資料；改善方向：成交拆成近 12 月／更早兩檔、社區併入各區檔、檔名加內容雜湊讓手機快取
 
 ## 下一步（照順序）
-1. 確認使用者已開啟 GitHub Pages，第一次部署成功，手機能開網址
+1. 首屏載入加速（見上方已知效能問題），達成 SPEC「4G 首屏 < 3 秒」
 2. 使用者用手機驗收 Phase 1（驗收清單在最後一次回報），收集問題修正
 3. 使用者確認後才進 Phase 2；Phase 2 驗收樣本「璞園安彊」「君邑中運路案」在近 3 年資料中查無，需回補 2012 年起歷史資料（Phase 2 項目）

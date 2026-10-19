@@ -188,7 +188,7 @@ class OSM:
         self.spent = 0.0
         self.budget = budget
         self.log = log or (lambda *_: None)
-        self.skipped = False  # 本筆是否因額度用完而沒查 OSM
+        self.skipped = False  # 本筆是否因額度用完或伺服器出錯而沒查成 OSM
 
     def _query(self, q):
         if self.left <= 0 or self.spent >= self.budget:
@@ -210,8 +210,10 @@ class OSM:
                 break
             self.log(f"    OSM 查詢失敗（{url.split('/')[2]}）：{info.get('error')}")
             if self.spent >= self.budget:
+                self.skipped = True
                 return None
         else:
+            self.skipped = True  # 所有伺服器都出錯：不算「查無」，下次再查
             return None
         try:
             return json.loads(body).get("elements", [])
