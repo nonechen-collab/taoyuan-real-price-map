@@ -1,0 +1,2 @@
+# 定位快取只新增不改寫：兩次執行各自新增的列，合併時兩邊都留
+data/geocode_cache.csv merge=union

@@ -88,11 +88,16 @@ jobs:
           git add data/periods data/geocode_cache.csv reports/pipeline_report.md reports/pipeline_summary.json
           if git diff --cached --quiet; then
             echo "沒有新資料要存回"
-          else
-            git commit -m "資料更新 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
-            git pull --rebase
-            git push
+            exit 0
           fi
+          git commit -m "資料更新 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+          # 兩次執行接連推送時會改到同一份報告：以這次的為準（-X theirs）；定位快取兩邊的新列都留（.gitattributes 的 merge=union）
+          for i in 1 2 3; do
+            if git pull --rebase -X theirs && git push; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep 10
+          done
+          echo "::warning::存回資料失敗（重試 3 次），網站照樣部署；下次排程會重新產生"
 
       - name: 安裝 Node.js
         uses: actions/setup-node@v7
