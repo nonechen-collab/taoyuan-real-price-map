@@ -11,7 +11,8 @@ async function getJson<T>(path: string, fresh = false): Promise<T> {
 
 export async function loadMeta(): Promise<Meta> {
   const m = await getJson<Meta>("meta.json", true);
-  if (!m.version || m.version < 2 || !m.districts[0]?.parts) {
+  // 缺欄位＝讀到手機快取的舊版 meta（網路慢時）：丟出「格式已更新」，App 會自動重新整理一次
+  if (!m.version || m.version < 2 || !m.districts[0]?.parts || !m.history || !m.search || !m.stats) {
     throw new Error("資料格式已更新，請重新整理頁面");
   }
   return m;
