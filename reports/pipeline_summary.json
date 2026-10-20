@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-20T13:29:37+08:00",
+ "generated": "2026-10-20T13:45:36+08:00",
  "periods": [
   {
    "name": "season-101S3",
@@ -364,10 +364,10 @@
   "交易日期不合理（打錯，例如 2101 年）": 13
  },
  "geocode": {
-  "cached": 168172,
-  "new": 4,
-  "osm": 5,
-  "osm_deferred": 1835,
+  "cached": 168175,
+  "new": 1,
+  "osm": 4,
+  "osm_deferred": 1834,
   "doorplate_month": "11509",
   "buildings": {
    "1": 488584,
@@ -425,7 +425,7 @@
   "communities": 15444,
   "entities": 39423,
   "history_max": 2147381,
-  "history_total": 101686072,
+  "history_total": 101686073,
   "files": {
    "中壢區": [
     4227037,
@@ -456,7 +456,7 @@
     3122586
    ],
    "觀音區": [
-    1164974,
+    1164975,
     2261672
    ],
    "平鎮區": [
