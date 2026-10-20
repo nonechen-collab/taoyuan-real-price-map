@@ -1,9 +1,9 @@
 import { fmtRoc, fmtUnitShort } from "../format";
-import { COLORS } from "../stats";
 import type { Basemap } from "../map/MapView";
 import type { Meta } from "../types";
 
 export function Legend({ breaks, mode, onMode }: { breaks: number[]; mode: "q" | "f"; onMode: (m: "q" | "f") => void }) {
+  // 色塊用 CSS 變數（深淺模式各一套），見 src/palette.ts
   const labels = [
     `< ${fmtUnitShort(breaks[0])}`,
     ...breaks.slice(0, -1).map((b, i) => `${fmtUnitShort(b)}–${fmtUnitShort(breaks[i + 1])}`),
@@ -15,7 +15,7 @@ export function Legend({ breaks, mode, onMode }: { breaks: number[]; mode: "q" |
       <span className="legend-row">
         {labels.map((l, i) => (
           <span key={i} className="legend-item">
-            <i style={{ background: COLORS[i] }} />
+            <i className={`pc${i}`} />
             {l}
           </span>
         ))}

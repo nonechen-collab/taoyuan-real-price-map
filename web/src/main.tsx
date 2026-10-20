@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import "./styles.css";
+import "./phase2.css";
 
 // 離線快取：網站有新版時，新版在背景裝好後自動重新載入
 // （資料格式改版時，手機裡的舊程式讀新資料會出錯，必須換成新程式）

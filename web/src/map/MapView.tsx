@@ -13,7 +13,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 // MapLibre 6 的 worker 是獨立檔案，由 scripts/copy-worker.mjs 複製到 public/ 原樣提供
 setWorkerUrl(`${import.meta.env.BASE_URL}maplibre-gl-worker.mjs`);
-import { COLORS } from "../stats";
+import { PRICE } from "../palette";
 import { circlePolygon } from "../geo";
 import type { LngLat, Scope } from "../types";
 
@@ -60,9 +60,9 @@ const FONTS = ["Roboto", "Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 const ATTR = '底圖 © <a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">內政部國土測繪中心</a>';
 
-function stepColor(prop: string, breaks: number[]): ExpressionSpecification {
-  const e: unknown[] = ["step", ["to-number", ["get", prop], 0], COLORS[0]];
-  breaks.forEach((b, i) => e.push(b, COLORS[i + 1]));
+function stepColor(prop: string, breaks: number[], colors: string[]): ExpressionSpecification {
+  const e: unknown[] = ["step", ["to-number", ["get", prop], 0], colors[0]];
+  breaks.forEach((b, i) => e.push(b, colors[i + 1]));
   return ["case", ["==", ["get", prop], null], "#9ca3af", e] as unknown as ExpressionSpecification;
 }
 
@@ -113,8 +113,8 @@ function makeStyle(): StyleSpecification {
             ZOOM_TX, ["interpolate", ["linear"], ["sqrt", ["get", "n"]], 1, 9, 4, 14, 10, 24, 20, 34],
           ],
           "circle-opacity": 0.85,
-          "circle-stroke-width": ["case", ["==", ["get", "p"], 1], 2.5, 1],
-          "circle-stroke-color": ["case", ["==", ["get", "p"], 1], "#1d4ed8", "#ffffff"],
+          "circle-stroke-width": ["case", ["==", ["get", "p"], 1], 3, 1],
+          "circle-stroke-color": "#52514e",
         },
       },
       {
@@ -133,8 +133,8 @@ function makeStyle(): StyleSpecification {
         paint: {
           "circle-color": "#9ca3af",
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 5, 19, 9],
-          "circle-stroke-width": ["case", ["==", ["get", "k"], 1], 2, 1],
-          "circle-stroke-color": ["case", ["==", ["get", "k"], 1], "#1d4ed8", "#ffffff"],
+          "circle-stroke-width": ["case", ["==", ["get", "k"], 1], 2.5, 1],
+          "circle-stroke-color": "#52514e",
         },
       },
       {
@@ -336,10 +336,16 @@ function apply(m: MLMap, p: Props, force: boolean) {
         : EMPTY,
     );
   }
-  if (changed("breaks", p.breaks.join(","))) {
-    m.setPaintProperty("hex-fill", "fill-color", stepColor("m", p.breaks));
-    m.setPaintProperty("comm-circle", "circle-color", stepColor("m", p.breaks));
-    m.setPaintProperty("tx-circle", "circle-color", stepColor("up", p.breaks));
+  if (changed("breaks", `${p.breaks.join(",")}|${p.dark}`)) {
+    const colors = PRICE[p.dark ? "dark" : "light"];
+    m.setPaintProperty("hex-fill", "fill-color", stepColor("m", p.breaks, colors));
+    m.setPaintProperty("comm-circle", "circle-color", stepColor("m", p.breaks, colors));
+    m.setPaintProperty("tx-circle", "circle-color", stepColor("up", p.breaks, colors));
+    // 圓點外圈：淺色模式深灰、深色模式淺灰，居中那級（接近底色）才看得見；預售為粗外圈
+    const ring = p.dark ? "#c3c2b7" : "#52514e";
+    m.setPaintProperty("comm-circle", "circle-stroke-color", ring);
+    m.setPaintProperty("tx-circle", "circle-stroke-color", ring);
+    m.setPaintProperty("hex-fill", "fill-outline-color", p.dark ? "rgba(195,194,183,0.35)" : "rgba(82,81,78,0.35)");
   }
   if (changed("selected", p.selected)) m.setFilter("tx-selected", ["==", ["get", "i"], p.selected ?? -1]);
   if (changed("base", `${p.basemap}|${p.village}|${p.dark}`)) {

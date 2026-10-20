@@ -19,7 +19,20 @@ COMPUTED = [
     ("車位面積未拆", False, "有車位但車位面積為 0（面積含在建物裡）；扣車位面積用中位數估算"),
     ("單價估算", False, "扣車位單價含估算成分"),
     ("無單價", True, "總價或面積缺漏，算不出單價"),
+    ("合宜住宅", True, "政府合宜住宅配售（資格限定、價格遠低於市價）；依土地段別與簽約期間辨識，見 AFFORDABLE"),
 ]
+
+# 政府合宜住宅配售：資料沒有欄位可判斷（備註空白、沒有建案名稱），只能用土地段別＋簽約期間辨識
+AFFORDABLE = [
+    # (行政區, 土地段別, 起日, 迄日, 說明)
+    ("龜山區", "牛角坡段樟腦寮小段", "2013-01-01", "2014-12-31", "A7 合宜住宅（2013 年抽籤配售，約 2,600 戶，每坪約 14 萬）"),
+]
+
+
+def affordable(district, sections, date):
+    """sections：這筆交易的土地段別集合；date：datetime.date"""
+    d = date.isoformat()
+    return any(district == dist and sec in sections and a <= d <= b for dist, sec, a, b, _ in AFFORDABLE)
 
 
 def load_keywords(path=KEYWORDS_CSV):

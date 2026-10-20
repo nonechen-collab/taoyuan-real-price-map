@@ -91,7 +91,11 @@ def store(src_zip, kind, season=None):
         if dest.exists():
             return name, False
         city = sorted(k for k in names if CITY_FILE.match(k))
-        if not any(k.startswith("h_lvr_land_a") for k in city):
+        main = [k for k in city if k in ("h_lvr_land_a.csv", "h_lvr_land_b.csv")]
+        rows = sum(max(0, zf.read(names[k]).count(b"\n") - 2) for k in main)
+        if kind == "season" and rows == 0:
+            return None, False  # 空季：實價登錄 2012/8 才開始，101S1–101S3 只有欄位說明
+        if "h_lvr_land_a.csv" not in city:
             raise ValueError("zip 內找不到桃園買賣檔（h_lvr_land_a.csv）")
         config.PERIODS_DIR.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(".tmp")
@@ -181,6 +185,8 @@ def _record(label, info, path, kind, season=None):
     if path:
         try:
             rec["name"], rec["new"] = store(path, kind, season)
+            if rec["name"] is None:
+                rec["note"] = "空季（沒有桃園資料，略過）"
         except (ValueError, zipfile.BadZipFile, KeyError) as e:
             rec.update(ok=False, error=f"存檔失敗：{e}")
     return rec

@@ -5,14 +5,22 @@ import FilterDrawer from "./components/FilterDrawer";
 import StatsCard from "./components/StatsCard";
 import TxCard from "./components/TxCard";
 import { About, LayerMenu, Legend } from "./components/Overlays";
-import { loadMeta, loadPart, newRegistry } from "./data";
+import { loadMeta, loadPart, loadSearch, newRegistry } from "./data";
+import { communityMedians, deviation } from "./analysis";
+import { exportCsv } from "./csv";
+import { useFavorites, type Fav } from "./favorites";
+import ComparePage, { MAX_COMPARE, type ComparePick } from "./pages/ComparePage";
+import EntityPage, { txFav } from "./pages/EntityPage";
+import FavoritesPage from "./pages/FavoritesPage";
+import SearchPage from "./pages/SearchPage";
+import TrendPage, { freeSlot, MAX_PICKS, type TrendPick } from "./pages/TrendPage";
 import {
   PERIOD_LABEL, activeCount, defaultFilters, filtersFromParams, filtersToParams, makeCtx, pass, type Filters,
 } from "./filters";
 import { fmtRoc, fmtUnitShort } from "./format";
 import { distance, hexCenter, hexKey, hexPolygon, hexSize, pointInPolygon, spiralOffset } from "./geo";
 import { FIXED_BREAKS, median, quantileBreaks, summarize } from "./stats";
-import type { Community, LngLat, Meta, Scope, Tx } from "./types";
+import type { Community, Entity, LngLat, Meta, Page, Scope, SearchEntry, Tx } from "./types";
 
 // 預設地圖中心：桃園市中心（桃園市政府／桃園火車站一帶）
 const DEFAULT_CENTER: LngLat = [121.3078, 24.9915];
@@ -61,6 +69,18 @@ function parseLL(s: string | null): LngLat | null {
 }
 const llStr = (p: LngLat) => `${p[1].toFixed(5)},${p[0].toFixed(5)}`;
 
+/** 網址的 pg 參數 ↔ 分頁 */
+function parsePg(h: URLSearchParams): Page | null {
+  const v = h.get("pg");
+  if (!v) return null;
+  if (v.startsWith("c:")) return { kind: "c", id: v.slice(2) };
+  if (v.startsWith("p:")) return { kind: "p", id: v.slice(2) };
+  if (v === "trend" || v === "cmp" || v === "fav" || v === "search") return { kind: v };
+  return null;
+}
+const pgStr = (p: Page) => (p.kind === "c" || p.kind === "p" ? `${p.kind}:${p.id}` : p.kind);
+const entityKind = (id: string): "c" | "p" => (id.startsWith("p") ? "p" : "c");
+
 export default function App() {
   const hash = useRef(readHash());
   const initial = useRef({
@@ -91,7 +111,7 @@ export default function App() {
   const [drawing, setDrawing] = useState<LngLat[] | null>(null);
   const [myLoc, setMyLoc] = useState<LngLat | null>(null);
   const [fly, setFly] = useState<FlyTarget | null>(null);
-  const [panel, setPanel] = useState<"" | "filter" | "layer" | "about">("");
+  const [panel, setPanel] = useState<"" | "filter" | "layer" | "about" | "menu">("");
   const [online, setOnline] = useState(navigator.onLine);
   const [dark, setDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   const [limit, setLimit] = useState(PAGE);
@@ -99,10 +119,28 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const pendingTx = useRef<string | null>(hash.current.get("t"));
   const pendingComm = useRef<string | null>(hash.current.get("cm"));
+  const [page, setPage] = useState<Page | null>(() => parsePg(hash.current));
+  const pushed = useRef(0); // 這次開啟後推進瀏覽紀錄的分頁數（返回鍵用）
+  const shardHints = useRef(new Map<string, number>());
+  const [hintTick, setHintTick] = useState(0);
+  const [trendPicks, setTrendPicks] = useState<TrendPick[]>(() => store("trendPicks", []));
+  const [cmpPicks, setCmpPicks] = useState<ComparePick[]>(() => store("cmpPicks", []));
+  const favs = useFavorites();
 
   useEffect(() => save("basemap", basemap), [basemap]);
   useEffect(() => save("village", village), [village]);
   useEffect(() => save("colorMode", colorMode), [colorMode]);
+  useEffect(() => save("trendPicks", trendPicks), [trendPicks]);
+  useEffect(() => save("cmpPicks", cmpPicks), [cmpPicks]);
+  // Android 返回鍵：關閉分頁（回到上一頁或地圖），不直接離開網站
+  useEffect(() => {
+    const on = () => {
+      pushed.current = Math.max(0, pushed.current - 1);
+      setPage(parsePg(readHash()));
+    };
+    window.addEventListener("popstate", on);
+    return () => window.removeEventListener("popstate", on);
+  }, []);
   useEffect(() => {
     const on = () => setOnline(true);
     const off = () => setOnline(false);
@@ -366,10 +404,11 @@ export default function App() {
       if (scope.kind === "community" && comms[scope.cid]) p.set("cm", comms[scope.cid].id);
       const st = selected != null ? all[selected] : null;
       if (st) p.set("t", st.id);
+      if (page) p.set("pg", pgStr(page));
       window.history.replaceState(null, "", `#${p.toString()}`);
     }, 400);
     return () => window.clearTimeout(t);
-  }, [filters, defaults, view, scope, selected, comms, all]);
+  }, [filters, defaults, view, scope, selected, comms, all, page]);
 
   // ── 互動 ──
   const scrollToCard = useCallback((i: number) => {
@@ -442,6 +481,134 @@ export default function App() {
     setDrawing(null);
   };
 
+  // ── Phase 2：分頁、走勢、比較、收藏、匯出 ──
+  const openPage = useCallback((p: Page) => {
+    const h = readHash();
+    h.set("pg", pgStr(p));
+    window.history.pushState(null, "", `#${h.toString()}`);
+    pushed.current += 1;
+    setPage(p);
+    setPanel("");
+  }, []);
+  const closePage = useCallback(() => {
+    if (pushed.current > 0) window.history.back();
+    else {
+      const h = readHash();
+      h.delete("pg");
+      window.history.replaceState(null, "", `#${h.toString()}`);
+      setPage(null);
+    }
+  }, []);
+  const openEntity = useCallback((id: string, shard?: number) => {
+    if (shard !== undefined) shardHints.current.set(id, shard);
+    openPage({ kind: entityKind(id), id });
+  }, [openPage]);
+
+  // 分頁需要的歷史檔份數：先查已載入的社區，再查搜尋索引（舊社區、深連結）
+  const pageId = page && (page.kind === "c" || page.kind === "p") ? page.id : null;
+  const knownShard = pageId
+    ? reg.current.byId.has(pageId)
+      ? reg.current.list[reg.current.byId.get(pageId)!].shard
+      : shardHints.current.get(pageId)
+    : undefined;
+  void hintTick;
+  useEffect(() => {
+    if (!pageId || knownShard !== undefined || !meta) return;
+    loadSearch(meta)
+      .then((list) => {
+        const e = list.find((x) => x.id === pageId);
+        shardHints.current.set(pageId, e ? e.shard : -1);
+        setHintTick((n) => n + 1);
+      })
+      .catch(() => setToast("搜尋資料載入失敗，請確認網路"));
+  }, [pageId, knownShard, meta]);
+
+  const showEntityOnMap = useCallback((e: Entity) => {
+    closePage();
+    const cid = reg.current.byId.get(e.info.id);
+    if (cid !== undefined) setScope({ kind: "community", cid });
+    if (e.info.lat != null && e.info.lon != null) setFly({ center: [e.info.lon, e.info.lat], zoom: 16.5, key: Date.now() });
+    setSheet("half");
+  }, [closePage]);
+
+  const toggleTrend = useCallback((e: Entity) => {
+    setTrendPicks((ps) => {
+      if (ps.some((p) => p.type === "e" && p.id === e.info.id)) return ps.filter((p) => !(p.type === "e" && p.id === e.info.id));
+      const slot = freeSlot(ps);
+      if (slot < 0) {
+        setToast(`走勢最多 ${MAX_PICKS} 個，請先到走勢頁移除`);
+        return ps;
+      }
+      setToast("已加入走勢（選單 → 行情走勢）");
+      return [...ps, { type: "e", id: e.info.id, name: e.info.name, shard: e.info.shard, presale: e.info.presale, slot }];
+    });
+  }, []);
+  const toggleCompare = useCallback((e: Entity) => {
+    setCmpPicks((ps) => {
+      if (ps.some((p) => p.id === e.info.id)) return ps.filter((p) => p.id !== e.info.id);
+      if (ps.length >= MAX_COMPARE) {
+        setToast(`比較最多 ${MAX_COMPARE} 個建案`);
+        return ps;
+      }
+      setToast("已加入比較（選單 → 比較表）");
+      return [...ps, { id: e.info.id, name: e.info.name, shard: e.info.shard }];
+    });
+  }, []);
+
+  const openTrend = useCallback(() => {
+    if (!trendPicks.length) {
+      // 預設：全市＋畫面內成交最多的行政區
+      const cnt = new Map<string, number>();
+      for (const t of inView) cnt.set(t.district, (cnt.get(t.district) ?? 0) + 1);
+      const top = [...cnt].sort((a, b) => b[1] - a[1])[0]?.[0];
+      const name = meta?.districts.find((d) => d.code === top)?.name;
+      setTrendPicks([{ type: "d", name: "桃園市", slot: 0 }, ...(name ? [{ type: "d" as const, name, slot: 1 }] : [])]);
+    }
+    openPage({ kind: "trend" });
+  }, [trendPicks.length, inView, meta, openPage]);
+
+  const showFavTx = useCallback((f: Fav) => {
+    closePage();
+    if (f.lat != null && f.lon != null) setFly({ center: [f.lon, f.lat], zoom: 17.5, key: Date.now() });
+    const t = all.find((x) => x.id === f.id);
+    if (t) setSelected(t.i);
+  }, [closePage, all]);
+
+  const medians = useMemo(() => (meta ? communityMedians(all, meta) : new Map<string, number>()), [all, meta]);
+
+  const scopeLabel = (() => {
+    const per = filters ? PERIOD_LABEL[filters.period] : "";
+    if (scope.kind === "circle") return `${scope.source === "gps" ? "我附近" : "選定地點"} ${scope.radius >= 1000 ? scope.radius / 1000 + " km" : scope.radius + " m"} · ${per}`;
+    if (scope.kind === "polygon") return `自訂範圍 · ${per}`;
+    if (scope.kind === "community") return `${comms[scope.cid]?.name ?? "社區"} · ${per}`;
+    return `目前地圖畫面 · ${per}`;
+  })();
+
+  // 比較表：目前範圍內，套用篩選但不限類別與屋齡
+  const cmpBase = useMemo(() => {
+    if (page?.kind !== "cmp" || !meta || !filters) return [];
+    const f2: Filters = { ...filters, kinds: [0, 1], ageMin: null, ageMax: null };
+    const ctx = makeCtx(f2, meta, latest);
+    const [w, s, e, n] = view?.bounds ?? [0, 0, 0, 0];
+    return all.filter((t) => {
+      if (!pass(t, f2, ctx)) return false;
+      if (scope.kind === "community") return t.cid === scope.cid;
+      if (t.lat == null || t.lon == null) return false;
+      if (scope.kind === "circle") return distance(scope.center, [t.lon, t.lat]) <= scope.radius;
+      if (scope.kind === "polygon") return pointInPolygon([t.lon, t.lat], scope.points);
+      return t.lon >= w && t.lon <= e && t.lat >= s && t.lat <= n;
+    });
+  }, [page, all, filters, meta, latest, scope, view]);
+
+  const doExport = useCallback(() => {
+    if (!meta) return;
+    exportCsv(sorted, meta, comms, `${scopeLabel}；${sorted.length} 筆`);
+    setPanel("");
+    setToast(`已匯出 ${sorted.length.toLocaleString("zh-TW")} 筆`);
+  }, [meta, sorted, comms, scopeLabel]);
+
+  const openSearchResult = useCallback((e: SearchEntry) => openEntity(e.id, e.shard), [openEntity]);
+
   // ── 畫面 ──
   if (error) {
     return (
@@ -482,6 +649,11 @@ export default function App() {
               {comm.floors ? ` · ${comm.floors} 樓` : ""}
             </small>
           </h2>
+        )}
+        {comm && (
+          <button className="chip small on" onClick={() => openEntity(comm.id, comm.shard)}>
+            {comm.presale ? "建案頁" : "社區頁"} ›
+          </button>
         )}
         {scope.kind !== "view" && (
           <button className="icon-btn small" aria-label="清除範圍" onClick={() => { setScope({ kind: "view" }); setSort("date"); }}>
@@ -543,7 +715,7 @@ export default function App() {
             </button>
           </div>
         )}
-        <button className="icon-btn" aria-label="資料說明" onClick={() => setPanel("about")} disabled={!meta}>ⓘ</button>
+        <button className="icon-btn" aria-label="選單" aria-expanded={panel === "menu"} onClick={() => setPanel(panel === "menu" ? "" : "menu")} disabled={!meta}>☰</button>
       </header>
 
       {!online && <div className="offline">離線中：顯示上次載入的資料</div>}
@@ -578,6 +750,7 @@ export default function App() {
             {scoped.length.toLocaleString("zh-TW")} 筆
             {scope.kind === "view" && zoom < ZOOM_COMM ? "（放大地圖看社區與單筆）" : ""}
           </span>
+          <button className="chip small" onClick={doExport} disabled={!sorted.length} aria-label="匯出目前列表為 CSV">⬇ CSV</button>
           <div className="seg">
             <button className={sort === "date" ? "on" : ""} onClick={() => setSort("date")}>最新</button>
             {scope.kind === "circle" && <button className={sort === "dist" ? "on" : ""} onClick={() => setSort("dist")}>最近</button>}
@@ -610,6 +783,9 @@ export default function App() {
               selected={selected === t.i}
               onSelect={onCardSelect}
               onCommunity={onSelectCommunity}
+              dev={deviation(t, medians)}
+              starred={favs.isFav(`t:${t.id}`)}
+              onStar={(x) => favs.toggle(txFav(x, x.cid >= 0 ? comms[x.cid]?.name : undefined))}
             />
           ))}
         {sorted.length > limit && (
@@ -630,6 +806,63 @@ export default function App() {
         <FilterDrawer meta={meta} value={filters} defaults={defaults} count={filtered.length} onChange={setFilters} onClose={() => setPanel("")} />
       )}
       {panel === "about" && meta && <About meta={meta} onClose={() => setPanel("")} />}
+      {panel === "menu" && meta && (
+        <div className="menu" role="menu">
+          <button role="menuitem" onClick={() => openPage({ kind: "search" })}>🔍 搜尋建案／社區</button>
+          <button role="menuitem" onClick={openTrend}>📈 行情走勢</button>
+          <button role="menuitem" onClick={() => openPage({ kind: "cmp" })}>⚖️ 比較表{cmpPicks.length ? `（${cmpPicks.length}）` : ""}</button>
+          <button role="menuitem" onClick={() => openPage({ kind: "fav" })}>⭐ 收藏與看屋筆記{favs.favs.length ? `（${favs.favs.length}）` : ""}</button>
+          <button role="menuitem" onClick={doExport} disabled={!sorted.length}>⬇ 匯出目前列表（CSV）</button>
+          <button role="menuitem" onClick={() => setPanel("about")}>ⓘ 資料說明</button>
+        </div>
+      )}
+      {meta && page && (page.kind === "c" || page.kind === "p") && (
+        <EntityPage
+          key={page.id}
+          meta={meta}
+          reg={reg.current}
+          id={page.id}
+          shard={knownShard}
+          mode={dark ? "dark" : "light"}
+          breaks={breaks}
+          favs={favs}
+          onBack={closePage}
+          onOpenEntity={(id) => openEntity(id)}
+          onShowOnMap={showEntityOnMap}
+          onAddTrend={toggleTrend}
+          onAddCompare={toggleCompare}
+          inTrend={trendPicks.some((t) => t.type === "e" && t.id === page.id)}
+          inCompare={cmpPicks.some((c) => c.id === page.id)}
+        />
+      )}
+      {meta && page?.kind === "trend" && (
+        <TrendPage
+          meta={meta}
+          reg={reg.current}
+          mode={dark ? "dark" : "light"}
+          picks={trendPicks}
+          setPicks={setTrendPicks}
+          onBack={closePage}
+          onOpenEntity={(id) => openEntity(id)}
+        />
+      )}
+      {meta && page?.kind === "cmp" && (
+        <ComparePage
+          meta={meta}
+          reg={reg.current}
+          base={cmpBase}
+          scopeLabel={scopeLabel}
+          picks={cmpPicks}
+          setPicks={setCmpPicks}
+          onBack={closePage}
+          onOpenEntity={(id) => openEntity(id)}
+        />
+      )}
+      {meta && page?.kind === "fav" && (
+        <FavoritesPage meta={meta} favs={favs} onBack={closePage} onOpenEntity={openEntity} onShowTx={showFavTx} />
+      )}
+      {meta && page?.kind === "search" && <SearchPage meta={meta} onBack={closePage} onOpen={openSearchResult} />}
+
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

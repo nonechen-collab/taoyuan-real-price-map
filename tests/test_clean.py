@@ -229,3 +229,61 @@ class TestAddress(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOldAddress(unittest.TestCase):
+    """2014 年底升格前的地址寫法（取自 101S4 季檔）"""
+
+    def test_old_county_prefix(self):
+        p = clean.parse_address("桃園縣中壢市同慶路237號3樓", "中壢區")
+        self.assertEqual((p["road"], p["no"]), ("同慶路", "237"))
+        p = clean.parse_address("桃園縣桃園市大興西路二段139巷103號2樓之2", "桃園區")  # 舊「桃園市」＝桃園區
+        self.assertEqual((p["road"], p["lane"], p["no"]), ("大興西路二段", "139巷", "103"))
+        p = clean.parse_address("桃園縣平鎮市新光路五段１１巷３號", "平鎮區")
+        self.assertEqual((p["road"], p["lane"], p["no"]), ("新光路五段", "11巷", "3"))
+
+    def test_repeated_prefix(self):
+        p = clean.parse_address("桃園縣中壢市桃園縣中壢市興仁路二段463巷1號5樓", "中壢區")
+        self.assertEqual((p["road"], p["lane"], p["no"]), ("興仁路二段", "463巷", "1"))
+
+    def test_strip_city(self):
+        self.assertEqual(clean.strip_city("桃園市中壢區中央西路", "中壢區"), "中央西路")
+        self.assertEqual(clean.strip_city("桃園縣龜山鄉文化二路", "龜山區"), "文化二路")
+        self.assertEqual(clean.strip_city("桃園市中正路", "桃園區"), "中正路")
+
+
+class TestUnit(unittest.TestCase):
+    """預售「棟及號」常見寫法（115S1–115S3 季檔，涵蓋約 95%）"""
+
+    def test_with_floor(self):
+        self.assertEqual(clean.parse_unit("A棟1-6F號", 6), ("A-1", 6))
+        self.assertEqual(clean.parse_unit("C2棟6F號", 6), ("C2", 6))
+        self.assertEqual(clean.parse_unit("A10-13F號", 13), ("A10", 13))
+        self.assertEqual(clean.parse_unit("B棟B2-03F號", 3), ("B2", 3))
+        self.assertEqual(clean.parse_unit("C1棟11樓號", 11), ("C1", 11))
+        self.assertEqual(clean.parse_unit("B棟24F-5號", 24), ("B-5", 24))
+        self.assertEqual(clean.parse_unit("Ｄ棟7F號", 7), ("D", 7))
+        self.assertEqual(clean.parse_unit("A棟09-11F號", 11), ("A-9", 11))
+
+    def test_without_floor(self):
+        self.assertEqual(clean.parse_unit("A棟5號", None), ("A-5", None))  # 透天，移轉層次「全」
+        self.assertEqual(clean.parse_unit("A棟1-05號", 5), ("A-1", 5))     # 05 是樓層
+        self.assertEqual(clean.parse_unit("A3棟0號", None), ("A3", None))  # 棟0號為佔位
+        self.assertEqual(clean.parse_unit("", 3), (None, 3))
+
+    def test_parcel_key(self):
+        self.assertEqual(clean.parcel_key("中壢區", "青山段", "04400000"), "中壢區|青山段|04400000")
+        self.assertIsNone(clean.parcel_key("中壢區", "", "04400000"))
+
+
+class TestAffordable(unittest.TestCase):
+    """政府合宜住宅：依土地段別＋簽約期間辨識（備註空白、沒有建案名稱）"""
+
+    def test_a7(self):
+        # RPVOMLLLIIIFFAH87CB 龜山區 牛角坡段樟腦寮小段 0069-0013 地號，102/07/25 簽約，每坪約 15 萬
+        self.assertTrue(rules.affordable("龜山區", {"牛角坡段樟腦寮小段"}, dt.date(2013, 7, 25)))
+        # 同一段別、5 年後的轉售是一般市場交易
+        self.assertFalse(rules.affordable("龜山區", {"牛角坡段樟腦寮小段"}, dt.date(2019, 3, 1)))
+        # 其他段別不算
+        self.assertFalse(rules.affordable("龜山區", {"中運段"}, dt.date(2013, 7, 25)))
+        self.assertFalse(rules.affordable("中壢區", {"牛角坡段樟腦寮小段"}, dt.date(2013, 7, 25)))

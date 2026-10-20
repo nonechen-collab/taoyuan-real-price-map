@@ -25,16 +25,17 @@
 - Windows 終端機輸出預設不是 UTF-8：Python 腳本開頭要把 stdout 改成 UTF-8（step1_probe.py 已處理）
 - 內政部憑證鏈過不了 Python 3.13 起的嚴格檢查：只關掉 VERIFY_X509_STRICT，不可關閉憑證驗證（step1_probe.py 已處理）
 
-## 目前進度（2026-10-19）
+## 目前進度（2026-10-20）
 - 本機工具：Python 3.13.15（`%LOCALAPPDATA%\Programs\Python\Python313`）、Node.js 24.22.0（`%LOCALAPPDATA%\Programs\nodejs`），都在使用者 PATH；沒有 gh CLI
 - Windows「智慧型應用程式控制」會擋 rolldown 原生 .node：本機要 `npm install --no-save --force @rolldown/binding-wasm32-wasi@<rolldown版本>`（npm 安裝或移除套件後會被清掉，要再裝一次）；不可要求使用者關閉安全設定
 - 預覽：`.claude/launch.json` 的 web 設定；內建瀏覽器面板隱藏時 requestAnimationFrame 不會執行，網址加 `?raf`（只在開發模式有效）可強制繪製地圖
 - Phase 1 程式完成：`pipeline/`（下載、清理、定位、社區、輸出）、`web/`（React＋MapLibre PWA）、`.github/workflows/update-data.yml`（排程＋Pages 部署）
-- 地理編碼：桃園市門牌坐標開放資料（買賣 99.5% 棟級命中）；OSM Overpass 最近常逾時，預售約 11% 建案尚未定位，排程會逐次補
+- 地理編碼：桃園市門牌坐標開放資料（買賣 98% 棟級命中）；預售建案另用土地地號連結交屋社區、同地段推估補位置；OSM Overpass 幾乎都逾時（2026-10-20 查 32 次成功 4 次），只當最後手段
 - GitHub Pages 已開啟（2026-10-19），第一次部署成功：https://nonechen-collab.github.io/taoyuan-real-price-map/
 - 首屏載入加速已做（2026-10-19）：各區拆近 12 月／更早兩檔、社區併入各區檔、檔名含內容雜湊；前端先載近 12 月，選近 3 年才載更早
+- Phase 2 程式完成（2026-10-20）：資料回補到 2012（季檔 101S3 起）、社區／建案歷史檔（64 份）、搜尋、社區頁／建案頁（散布圖、銷控表、樓層價差、去化）、走勢、比較表、收藏與看屋筆記、CSV 匯出、合宜住宅旗標
+- 本機記憶體只有 8 GB：完整建置要約 2 GB，記憶體吃緊時會用硬碟交換、變很慢（30 分鐘以上）；GitHub Actions 約 10 分鐘
 
 ## 下一步（照順序）
-1. Phase 1 已由使用者手機驗收通過（2026-10-20）
-2. 準備 Phase 2：先完整讀 SPEC，整理計畫與待決定事項給使用者確認後才開工
-3. Phase 2 驗收樣本「璞園安彊」「君邑中運路案」在近 3 年資料中查無，需回補 2012 年起歷史資料才能找
+1. 等使用者手機驗收 Phase 2（驗收清單與已知問題見最後一次回報；樣本建案結果記在 SPEC 決策紀錄「驗收樣本」）
+2. 驗收通過後更新 SPEC 進度紀錄；準備 Phase 3：先完整讀 SPEC，整理計畫與待決定事項給使用者確認後才開工

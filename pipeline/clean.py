@@ -262,13 +262,22 @@ _ADDR = re.compile(
 _VILLAGE = re.compile(r"^(?:\D{1,4}?[里村])?(?:\d+鄰)?")
 
 
+def strip_city(s, district):
+    """去掉地址開頭的縣市與行政區，含 2014 年底升格前的舊名（可能重複出現）：
+    '桃園縣中壢市同慶路…'、'桃園市中壢區同慶路…'、'桃園縣中壢市桃園縣中壢市興仁路…' → '同慶路…'"""
+    if district:
+        pat = re.compile(r"^(?:(?:桃園縣|桃園市)?" + re.escape(district[:-1]) + r"[市鎮鄉區])+")
+        out = pat.sub("", s)
+        if out != s:
+            return out
+    return re.sub(r"^(桃園市|桃園縣)", "", s)
+
+
 def parse_address(addr, district):
     """實價登錄門牌 → 棟級門牌 dict（去樓層）。純地號或無門牌號回傳 None。
     '桃園市中壢區中央西路二段２５０號十二樓之３' → road=中央西路二段, no=250
     '樓之N' 的 N 是戶號不屬於門牌；'號之N'（樓層前）才是門牌之號。"""
-    s = norm_text(addr)
-    s = re.sub(r"^(桃園市|桃園縣)", "", s)
-    s = re.sub("^" + re.escape(district or ""), "", s)
+    s = strip_city(norm_text(addr), district)
     if "地號" in s:
         return None
     m = _ADDR.match(s)
@@ -292,3 +301,37 @@ def building_key(p, road=None):
     if not p:
         return None
     return "|".join([p["district"], road or p["road"], p["lane"], p["alley"] + p["xiang"], p["no"]])
+
+
+# ───────────────────────── 預售棟及號 ─────────────────────────
+
+_UNIT_FW = str.maketrans("ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ", "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+
+def parse_unit(unit, floor=None):
+    """預售「棟及號」→ (直欄鍵, 樓層)，給虛擬銷控表用。直欄鍵＝棟＋戶；樓層優先取「nF／n樓」，否則用移轉層次。
+    'A棟1-6F號' → ('A-1', 6)；'C2棟6F號' → ('C2', 6)；'B棟B2-03F號' → ('B2', 3)；'A10-13F號' → ('A10', 13)；
+    'A棟5號'（透天，樓層 None）→ ('A-5', None)；'A棟1-05號' 且移轉層次 5 → ('A-1', 5)"""
+    s = norm_text(unit).translate(_UNIT_FW).upper().replace("號", "")
+    if not s:
+        return None, floor
+    m = re.search(r"(\d+)\s*(?:F|樓)", s)
+    fl = int(m.group(1)) if m else None
+    if m:
+        s = s[:m.start()] + "-" + s[m.end():]
+    toks = [t for t in re.split(r"[棟\-_\s]+", s) if t and not re.fullmatch(r"0+", t)]
+    if fl is None and floor is not None and len(toks) >= 2 and toks[-1].isdigit() and int(toks[-1]) == floor:
+        toks = toks[:-1]  # 「1-05號」的 05 就是樓層
+    if len(toks) >= 2 and toks[1].startswith(toks[0]) and toks[1] != toks[0]:
+        toks = toks[1:]  # 「B棟B2」→「B2」
+    toks = [str(int(t)) if t.isdigit() else t for t in toks]  # 「09」→「9」
+    return ("-".join(toks) or None), (fl if fl is not None else floor)
+
+
+def parcel_key(district, section, code):
+    """土地明細的地段＋地號 → 比對鍵（預售建案與交屋買賣用同一塊地連結）"""
+    section = norm_text(section)
+    code = re.sub(r"\D", "", code or "")
+    if not section or not code:
+        return None
+    return f"{district}|{section}|{code}"

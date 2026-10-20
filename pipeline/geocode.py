@@ -251,8 +251,7 @@ def _bbox_ll(dp, district):
 
 
 def geocode_presale(dp: DoorPlates, addr, district, osm: OSM):
-    s = re.sub(r"^(桃園市|桃園縣)", "", clean.norm_text(addr))
-    s = _strip_village(dp, district, re.sub("^" + re.escape(district), "", s))
+    s = _strip_village(dp, district, clean.strip_city(clean.norm_text(addr), district))
     # 1) 門牌號（含「號旁」「對面」「附近」）
     p = clean.parse_address(s, district)
     if p:

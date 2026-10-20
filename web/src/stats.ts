@@ -45,7 +45,6 @@ export function summarize(txs: Tx[]): Summary {
 
 /** 色階：依目前範圍分位數切 5 級，或固定級距 */
 export const FIXED_BREAKS = [20, 30, 40, 50];
-export const COLORS = ["#2b83ba", "#80bfab", "#e6e67a", "#f59053", "#d7191c"];
 
 export function quantileBreaks(values: number[]): number[] {
   if (values.length < 5) return FIXED_BREAKS;
