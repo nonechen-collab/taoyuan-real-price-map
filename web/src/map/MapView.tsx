@@ -50,7 +50,15 @@ interface Props {
   onSelectCommunity: (cid: number) => void;
   onLongPress: (p: LngLat) => void;
   onDrawTap: (p: LngLat) => void;
+  liquefaction: string | null; // 國土測繪中心土壤液化潛勢圖層代碼（SoilLiquefaction／SoilLiquefaction2）
+  floodFC: GeoJSON.FeatureCollection; // 淹水潛勢（cls 0–4 由淺到深）
+  poiFC: GeoJSON.FeatureCollection; // 車站、學校、公園（t：類別，sz：最小顯示縮放）
 }
+
+export const FLOOD_COLORS = ["#a5f3fc", "#67e8f9", "#22d3ee", "#0891b2", "#155e75"];
+export const POI_COLORS: Record<string, string> = {
+  機場捷運: "#7c3aed", 台鐵: "#111827", 高鐵: "#ea580c", 捷運綠線: "#16a34a", 學校: "#b45309", 公園: "#15803d",
+};
 
 export const ZOOM_COMM = 13;
 export const ZOOM_TX = 16;
@@ -78,6 +86,10 @@ function makeStyle(): StyleSpecification {
       ...raster("photo", NLSC("PHOTO2"), 19),
       ...raster("labels", NLSC("EMAP2")),
       ...raster("village", NLSC("Village"), 17),
+      ...raster("liq1", NLSC("SoilLiquefaction"), 16),
+      ...raster("liq2", NLSC("SoilLiquefaction2"), 16),
+      flood: { type: "geojson", data: EMPTY, attribution: "淹水潛勢：桃園市政府水務局" },
+      poi: { type: "geojson", data: EMPTY, attribution: "© OpenStreetMap 貢獻者" },
       hex: { type: "geojson", data: EMPTY },
       comm: { type: "geojson", data: EMPTY },
       tx: { type: "geojson", data: EMPTY },
@@ -92,6 +104,15 @@ function makeStyle(): StyleSpecification {
       { id: "photo", type: "raster", source: "photo", layout: { visibility: "none" } },
       { id: "labels", type: "raster", source: "labels", layout: { visibility: "none" } },
       { id: "village", type: "raster", source: "village", layout: { visibility: "none" }, paint: { "raster-opacity": 0.8 } },
+      { id: "liq1", type: "raster", source: "liq1", layout: { visibility: "none" }, paint: { "raster-opacity": 0.6 } },
+      { id: "liq2", type: "raster", source: "liq2", layout: { visibility: "none" }, paint: { "raster-opacity": 0.6 } },
+      {
+        id: "flood-fill", type: "fill", source: "flood",
+        paint: {
+          "fill-color": ["match", ["get", "c"], 0, FLOOD_COLORS[0], 1, FLOOD_COLORS[1], 2, FLOOD_COLORS[2], 3, FLOOD_COLORS[3], FLOOD_COLORS[4]],
+          "fill-opacity": 0.6,
+        },
+      },
       // 縮小：六角格
       {
         id: "hex-fill", type: "fill", source: "hex", maxzoom: ZOOM_COMM,
@@ -101,6 +122,24 @@ function makeStyle(): StyleSpecification {
         id: "hex-label", type: "symbol", source: "hex", minzoom: 10.5, maxzoom: ZOOM_COMM,
         layout: { "text-field": ["get", "l"], "text-size": 12, "text-font": FONTS, "text-allow-overlap": false },
         paint: { "text-color": "#111827", "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
+      },
+      // 車站、學校、公園（畫在成交點下面）
+      {
+        id: "poi-circle", type: "circle", source: "poi", filter: [">=", ["zoom"], ["get", "sz"]],
+        paint: {
+          "circle-color": ["match", ["get", "t"], ...Object.entries(POI_COLORS).flat(), "#6b7280"] as unknown as ExpressionSpecification,
+          "circle-radius": ["case", ["==", ["get", "g"], "st"], 6.5, 4.5],
+          "circle-stroke-width": ["case", ["==", ["get", "b"], 1], 2.5, 1.5],
+          "circle-stroke-color": ["case", ["==", ["get", "b"], 1], "#facc15", "#ffffff"],
+        },
+      },
+      {
+        id: "poi-label", type: "symbol", source: "poi", filter: [">=", ["zoom"], ["+", ["get", "sz"], 1]],
+        layout: {
+          "text-field": ["get", "name"], "text-size": 11, "text-font": FONTS, "text-offset": [0, 0.9], "text-anchor": "top",
+          "text-optional": true, "symbol-sort-key": ["case", ["==", ["get", "g"], "st"], 0, 1],
+        },
+        paint: { "text-color": "#374151", "text-halo-color": "rgba(255,255,255,0.9)", "text-halo-width": 1.2 },
       },
       // 中間：社區泡泡
       {
@@ -348,6 +387,12 @@ function apply(m: MLMap, p: Props, force: boolean) {
     m.setPaintProperty("hex-fill", "fill-outline-color", p.dark ? "rgba(195,194,183,0.35)" : "rgba(82,81,78,0.35)");
   }
   if (changed("selected", p.selected)) m.setFilter("tx-selected", ["==", ["get", "i"], p.selected ?? -1]);
+  if (changed("liq", p.liquefaction)) {
+    m.setLayoutProperty("liq1", "visibility", p.liquefaction === "SoilLiquefaction" ? "visible" : "none");
+    m.setLayoutProperty("liq2", "visibility", p.liquefaction === "SoilLiquefaction2" ? "visible" : "none");
+  }
+  if (changed("flood", p.floodFC)) src("flood")?.setData(p.floodFC);
+  if (changed("poi", p.poiFC)) src("poi")?.setData(p.poiFC);
   if (changed("base", `${p.basemap}|${p.village}|${p.dark}`)) {
     for (const id of ["emap", "gray", "photo"] as const) m.setLayoutProperty(id, "visibility", id === p.basemap ? "visible" : "none");
     m.setLayoutProperty("labels", "visibility", p.basemap === "photo" ? "visible" : "none");
@@ -361,7 +406,7 @@ function apply(m: MLMap, p: Props, force: boolean) {
     m.setPaintProperty("bg", "background-color", p.dark ? "#111827" : "#e5e7eb");
     const halo = p.dark ? "rgba(17,24,39,0.95)" : "rgba(255,255,255,0.95)";
     const text = p.dark ? "#f9fafb" : "#111827";
-    for (const id of ["hex-label", "comm-label", "tx-label"]) {
+    for (const id of ["hex-label", "comm-label", "tx-label", "poi-label"]) {
       m.setPaintProperty(id, "text-color", text);
       m.setPaintProperty(id, "text-halo-color", halo);
     }

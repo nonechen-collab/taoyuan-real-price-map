@@ -49,6 +49,57 @@ export interface Meta {
   search: string; // 搜尋索引檔
   searchFields: string[];
   stats: string; // 季統計檔
+  rent?: RentMeta; // 租賃（近 3 年），切到「租賃」才下載
+  layers?: LayersMeta;
+}
+
+export interface RentMeta {
+  fields: string[];
+  types: string[]; // 出租型態
+  whole: number[]; // 整層住家（算毛租金報酬率用）的出租型態索引
+  services: string[]; // 租賃住宅服務
+  flags: { bit: number; name: string; exclude: boolean; note: string }[];
+  defaultExclude: number;
+  districts: { code: string; name: string; n: number; file: string }[];
+  range: { from: string; to: string } | null;
+}
+
+export interface LayersMeta {
+  flood: { key: string; label: string; classes: string[]; file: string }[];
+  poi: string | null;
+  liquefaction: { key: string; label: string }[];
+}
+
+/** 一筆租約（前端解碼後） */
+export interface Rent {
+  i: number;
+  id: string;
+  district: string; // 行政區代碼
+  date: number; // yyyymmdd
+  ym: number;
+  lat: number | null;
+  lon: number | null;
+  geo: number;
+  addr: string;
+  cid: number; // 社區索引（同棟有買賣紀錄才有），-1 無
+  bt: number;
+  fl: number | null;
+  tf: number | null;
+  age: number | null;
+  rm: number | null;
+  hl: number | null;
+  ba: number | null;
+  pg: number | null; // 坪（不含車位）
+  rent: number; // 月租（元，已扣車位租金）
+  ru: number | null; // 每坪月租（元/坪）
+  rt: number; // 出租型態索引，-1 不明
+  sv: number; // 租賃住宅服務索引，-1 無
+  fu: number | null; // 附傢俱
+  mg: number | null; // 管理員
+  el: number | null; // 電梯
+  pt: number; // 車位類別，-1 無
+  pp: number | null; // 車位租金（元）
+  fx: number;
 }
 
 /** 一筆成交（前端解碼後） */
@@ -139,7 +190,8 @@ export type Page =
   | { kind: "trend" }
   | { kind: "cmp" }
   | { kind: "fav" }
-  | { kind: "search" };
+  | { kind: "search" }
+  | { kind: "val" }; // 估價助手
 
 export type LngLat = [number, number];
 

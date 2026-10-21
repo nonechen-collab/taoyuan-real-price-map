@@ -47,7 +47,7 @@ export default defineConfig({
           },
           {
             // 成交、明細、社區歷史、搜尋索引、季統計：檔名含內容版本碼，內容不會變 → 直接用手機快取；資料更新時檔名會換
-            urlPattern: ({ url }) => /\/data\/(?:(?:tx|detail|ent)\/)?[^/]+\.[0-9a-f]{8}\.json$/.test(url.pathname),
+            urlPattern: ({ url }) => /\/data\/(?:(?:tx|detail|ent|rent|layers)\/)?[^/]+\.[0-9a-f]{8}\.json$/.test(url.pathname),
             handler: "CacheFirst",
             options: {
               cacheName: "lvr-data-v2",

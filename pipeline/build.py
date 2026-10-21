@@ -20,7 +20,7 @@ import statistics
 import sys
 import zipfile
 
-from . import clean, community, config, geocode, periods, rules
+from . import clean, community, config, geocode, periods, rent, rules
 
 BTYPES = ["住宅大樓", "華廈", "公寓", "透天", "套房", "店面", "辦公", "廠辦", "工廠", "倉庫", "農舍", "其他"]
 DEFAULT_BTYPES = ["住宅大樓", "華廈", "公寓", "透天", "套房"]
@@ -37,7 +37,9 @@ SOURCES = [
     "內政部不動產成交案件實際資訊（實價登錄）開放資料，政府資料開放授權條款－第1版",
     "桃園市政府民政局 桃園市門牌位置坐標資料，政府資料開放授權條款－第1版",
     "預售建案部分位置 © OpenStreetMap 貢獻者（ODbL）",
-    "底圖：內政部國土測繪中心 通用版電子地圖",
+    "底圖：內政部國土測繪中心 通用版電子地圖；土壤液化潛勢：國土測繪中心圖磚（經濟部地質調查及礦業管理中心）",
+    "淹水潛勢：桃園市政府水務局 第三代桃園市淹水潛勢圖，政府資料開放授權條款－第1版",
+    "車站、學校、公園 © OpenStreetMap 貢獻者（ODbL）",
 ]
 
 
@@ -255,9 +257,16 @@ def build(offline=False, log=print):
             recs.append(r)
         else:
             excluded[why] += 1
+    since = _months_ago(t0.date(), 12 * config.RECENT_YEARS)
+    rents, rent_excl = rent.build(plist, since, TODAY)
+    log(f"  租賃（近 3 年）：{len(rents):,} 筆")
 
-    # 定位
+    # 定位（租賃與買賣共用棟級門牌鍵）
     bld_keys, pre_keys = {}, {}
+    for r in rents:
+        r["gkey"] = geocode.building_cache_key(r["parsed"]) if r["parsed"] else None
+        if r["gkey"]:
+            bld_keys[r["gkey"]] = r["parsed"]
     for r in recs:
         if r["kind"] == "a" and r["parsed"]:
             r["gkey"] = geocode.building_cache_key(r["parsed"])
@@ -279,6 +288,13 @@ def build(offline=False, log=print):
         r["level"] = int(g["精度"]) if g else 9
         r["lat"] = float(g["緯度"]) if g and g["緯度"] else None
         r["lon"] = float(g["經度"]) if g and g["經度"] else None
+    for r in rents:
+        g = geo.get(r["gkey"]) if r["gkey"] else None
+        r["level"] = int(g["精度"]) if g else 9
+        r["lat"] = float(g["緯度"]) if g and g["緯度"] else None
+        r["lon"] = float(g["經度"]) if g and g["經度"] else None
+        road = g["對應門牌"].split("|")[1] if g and g.get("對應門牌") and r["level"] <= 4 else None
+        r["bkey"] = clean.building_key(r["parsed"], road) if r["parsed"] else None
 
     log(f"  定位完成（{(config.now_tw() - t0).seconds} 秒）")
     # 預售建案位置：同建案取最準的一筆
@@ -322,13 +338,15 @@ def build(offline=False, log=print):
     for r in recs:
         if r["kind"] == "a":
             r["cid"] = assign.get(r.get("bkey"))
+    for r in rents:
+        r["cid"] = assign.get(r["bkey"]) if r["bkey"] else None
 
     log(f"  社區推定完成：{len(comm_info):,} 個（{(config.now_tw() - t0).seconds} 秒）")
     naff = mark_affordable(recs, parcels)
     if naff:
         log(f"  合宜住宅：{naff:,} 筆（預設不進統計）")
-    nlink = link_projects(recs, parcels, proj_info, comm_info)
-    log(f"  預售建案以地號連結交屋門牌：{nlink:,} 個建案")
+    nlink, nloc = link_projects(recs, parcels, proj_info, comm_info)
+    log(f"  預售建案連結交屋社區：地號 {nlink:,} 個、位置＋總樓層 {nloc:,} 個")
     t1 = config.now_tw()
     nsec, errs = locate_by_section(recs, parcels, proj_info)
     log(f"  （同地段推估花 {(config.now_tw() - t1).seconds} 秒）")
@@ -339,8 +357,10 @@ def build(offline=False, log=print):
     est = finish_prices(recs, flags)
     fill_project_ratios(recs, proj_info)
     log(f"  車位估價完成（{(config.now_tw() - t0).seconds} 秒）")
-    out_stats = write_outputs(recs, comm_info, proj_info, plist, flags, t0)
+    out_stats = write_outputs(recs, comm_info, proj_info, plist, flags, t0, rents)
     summary = make_summary(recs, raw, plist, per_counts, excluded, gstats, est, out_stats, flags, t0)
+    summary["rent"] = {"kept": len(rents), "located": sum(1 for r in rents if r["lat"] is not None),
+                       "excluded": dict(rent_excl.most_common()), "files": out_stats["rent_sizes"]}
     write_report(summary)
     return summary
 
@@ -386,8 +406,30 @@ def link_projects(recs, parcels, proj_info, comm_info):
         if pi.get("lat") is None or pi["level"] > 1:
             pi["lat"], pi["lon"], pi["level"] = c["lat"], c["lon"], 2
         linked += 1
+    # 地號連不到：精準定位的建案 80 m 內、總樓層數相同、完工不早於開賣的社區只有一個時才連（SPEC 原訂做法，當備援）
+    first = {}
+    for r in recs:
+        if r["kind"] == "b" and r.get("cid") in proj_info and (r["cid"] not in first or r["date"] < first[r["cid"]]):
+            first[r["cid"]] = r["date"]
+    grid = collections.defaultdict(list)
+    for cid, c in comm_info.items():
+        if c.get("lat") is not None and c.get("floors") and c.get("built"):
+            x, y = community._xy(c["lat"], c["lon"])
+            grid[(int(x // 100), int(y // 100))].append((cid, c, x, y))
+    by_loc = 0
+    for pid, pi in proj_info.items():
+        if pi.get("link") or pi.get("lat") is None or pi["level"] > 3 or not pi.get("floors") or pid not in first:
+            continue
+        x, y = community._xy(pi["lat"], pi["lon"])
+        since = first[pid].strftime("%Y-%m")
+        near = {cid for i in (-1, 0, 1) for j in (-1, 0, 1)
+                for cid, c, cx, cy in grid.get((int(x // 100) + i, int(y // 100) + j), ())
+                if c["floors"] == pi["floors"] and c["built"] >= since and math.dist((x, y), (cx, cy)) <= 80}
+        if len(near) == 1:
+            pi["link"] = near.pop()
+            by_loc += 1
     _sync_presale(recs, proj_info)
-    return linked
+    return linked, by_loc
 
 
 def _sync_presale(recs, proj_info):
@@ -594,7 +636,7 @@ def write_history(recs, comms, out):
     return files, sname, len(groups), sizes
 
 
-def write_outputs(recs, comm_info, proj_info, plist, flags, t0):
+def write_outputs(recs, comm_info, proj_info, plist, flags, t0, rents=()):
     """前端資料：每區拆「近 12 月」與「更早」兩檔（各自帶用到的社區），檔名含內容雜湊。
     前端先載近 12 月（預設期間），選「近 3 年」或自訂更早期間時才載更早的檔。"""
     out = config.OUT_DIR
@@ -641,6 +683,8 @@ def write_outputs(recs, comm_info, proj_info, plist, flags, t0):
         old.unlink()  # 上次的版本（檔名含雜湊，不刪會越積越多）
     stats_name, _ = _write_hashed(out, "stats", quarterly(recs, flags))
     hist_files, search_name, n_ent, hist_sizes = write_history(recs, comms, out)
+    rent_meta, rent_sizes = write_rent(rents, comms, out)
+    layers_meta = write_layers(out)
     first = min(r["date"] for r in recs)
     latest_issue = max((p for p in plist if p["kind"] == "issue"), key=lambda p: p.get("sale_to") or 0, default=None)
     meta = {
@@ -664,10 +708,66 @@ def write_outputs(recs, comm_info, proj_info, plist, flags, t0):
         "rangeAll": {"from": first.isoformat(), "to": latest.isoformat()},
         "history": {"n": N_SHARDS, "files": hist_files},
         "search": search_name, "searchFields": SEARCH_FIELDS, "stats": stats_name,
+        "rent": rent_meta, "layers": layers_meta,
     }
     _dump(out / "meta.json", meta, indent=1)
     return {"recent": len(recent), "districts": dist_meta, "sizes": sizes, "communities": len(n_comm),
-            "entities": n_ent, "history_max": max(hist_sizes), "history_total": sum(hist_sizes)}
+            "entities": n_ent, "history_max": max(hist_sizes), "history_total": sum(hist_sizes),
+            "rent_sizes": rent_sizes}
+
+
+def write_layers(out):
+    """圖層：data/layers/ 的淹水潛勢、車站學校公園（一次產生）複製成含雜湊的檔名；土壤液化用國土測繪中心圖磚"""
+    folder = out / "layers"
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(parents=True, exist_ok=True)
+    meta = {"flood": [], "poi": None, "liquefaction": [
+        {"key": "SoilLiquefaction", "label": "初級（全區）"}, {"key": "SoilLiquefaction2", "label": "中級（較細）"}]}
+    for f in sorted((config.DATA / "layers").glob("*.json")):
+        obj = json.loads(f.read_text("utf-8"))
+        name, _ = _write_hashed(folder, f.stem, obj)
+        if f.stem.startswith("flood_"):
+            meta["flood"].append({"key": f.stem[6:], "label": obj["scenario"], "classes": obj["classes"],
+                                  "file": f"layers/{name}"})
+        elif f.stem == "poi":
+            meta["poi"] = f"layers/{name}"
+    meta["flood"].sort(key=lambda x: x["key"], reverse=True)  # 24 小時在前
+    return meta
+
+
+def write_rent(rents, comms, out):
+    """租賃：每區一檔（含雜湊），前端切到「租賃」才下載。cm 為社區代號（同棟有買賣紀錄才有）"""
+    folder = out / "rent"
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(parents=True, exist_ok=True)
+    by_d = collections.defaultdict(list)
+    for r in rents:
+        by_d[r["district"]].append(r)
+    files, sizes = [], {}
+    for name, rs in sorted(by_d.items(), key=lambda kv: -len(kv[1])):
+        code = config.DISTRICT_CODE.get(name, name)
+        rs.sort(key=lambda r: r["date"], reverse=True)
+        rows = [[
+            r["id"], int(r["date"].strftime("%Y%m%d")), _r(r["lat"], 5), _r(r["lon"], 5), r["level"],
+            short_addr(r["addr"], name), r["cid"] if r["cid"] in comms else None,
+            BTYPES.index(r["btype"]), r["floor"], r["total_floors"], _r(r["age"], 1),
+            r["rooms"], r["halls"], r["baths"], _r(r["ping"], 1), int(r["rent"]), _r(r["ru"], 0),
+            r["rtype"], r["service"], r["furniture"], r["manager"], r["elevator"],
+            PARK_TYPES.index(r["park_type"]) if r["park_type"] in PARK_TYPES else -1,
+            int(r["park_rent"]) if r["park_rent"] else None, r["mask"],
+        ] for r in rs]
+        fname, size = _write_hashed(folder, code, {"fields": rent.FIELDS, "rows": rows})
+        files.append({"code": code, "name": name, "n": len(rs), "file": f"rent/{fname}"})
+        sizes[name] = size
+    meta = {
+        "fields": rent.FIELDS, "types": rent.RENT_TYPES, "whole": [rent.RENT_TYPES.index(t) for t in rent.WHOLE_TYPES],
+        "services": rent.SERVICES,
+        "flags": [{"bit": i, "name": n, "exclude": ex, "note": note} for i, (n, ex, note) in enumerate(rent.FLAGS)],
+        "defaultExclude": rent.default_exclude_mask(), "districts": files,
+        "range": {"from": min(r["date"] for r in rents).isoformat(), "to": max(r["date"] for r in rents).isoformat()}
+        if rents else None,
+    }
+    return meta, sizes
 
 
 def short_addr(addr, district):
@@ -766,6 +866,12 @@ def write_report(s):
     L += ["", f"車位估價：估車位價 {s['park_estimated'].get('price', 0):,} 筆、估車位面積 {s['park_estimated'].get('area', 0):,} 筆", "",
           "## 前端檔案大小", "", "| 行政區 | 成交檔 | 明細檔 |", "|---|---|---|"]
     L += [f"| {k} | {v[0] / 1e6:.2f} MB | {v[1] / 1e6:.2f} MB |" for k, v in s["output"]["files"].items()]
+    if s.get("rent"):
+        rt = s["rent"]
+        L += ["", "## 租賃（近 3 年）", "",
+              f"- 保留 {rt['kept']:,} 筆；定位 {rt['located']:,} 筆（{rt['located'] / max(1, rt['kept']):.1%}）",
+              "- 排除：" + "、".join(f"{k} {v:,} 筆" for k, v in rt["excluded"].items()),
+              "- 各區檔案：" + "、".join(f"{k} {v / 1e6:.2f} MB" for k, v in rt["files"].items())]
     config.REPORT_DIR.mkdir(exist_ok=True)
     (config.REPORT_DIR / "pipeline_report.md").write_text("\n".join(L) + "\n", encoding="utf-8")
     with open(config.REPORT_DIR / "pipeline_summary.json", "w", encoding="utf-8") as f:

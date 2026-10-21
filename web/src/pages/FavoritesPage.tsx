@@ -5,17 +5,19 @@ import NotesEditor from "./NotesEditor";
 import PageShell from "./PageShell";
 import type { Meta } from "../types";
 
-const KIND_NAME = { c: "社區", p: "預售建案", t: "成交" } as const;
+const KIND_NAME = { c: "社區", p: "預售建案", t: "成交", a: "範圍" } as const;
 
 interface Props {
   meta: Meta;
   favs: Favorites;
+  alerts: Record<string, number>; // 收藏 key → 新成交筆數
   onBack: () => void;
   onOpenEntity: (id: string, shard?: number) => void;
   onShowTx: (f: Fav) => void;
+  onOpenArea: (f: Fav) => void;
 }
 
-export default function FavoritesPage({ meta, favs, onBack, onOpenEntity, onShowTx }: Props) {
+export default function FavoritesPage({ meta, favs, alerts, onBack, onOpenEntity, onShowTx, onOpenArea }: Props) {
   const [open, setOpen] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
@@ -42,7 +44,7 @@ export default function FavoritesPage({ meta, favs, onBack, onOpenEntity, onShow
         </div>
         {msg && <p className="note-box">{msg}</p>}
         {favs.saveError && <p className="note-box">⚠ 這個瀏覽器不允許儲存（可能是無痕模式），收藏關掉網頁就會消失。</p>}
-        <p className="note-box">收藏與筆記只存在這支手機的瀏覽器；清除瀏覽器資料或換手機前，請先「匯出備份」。</p>
+        <p className="note-box">收藏與筆記只存在這支手機的瀏覽器；清除瀏覽器資料或換手機前，請先「匯出備份」。收藏的社區、建案、範圍有新成交時，選單會出現紅點。範圍收藏：在地圖畫圈或多邊形後按「☆ 收藏範圍」。</p>
       </section>
       {!favs.favs.length && (
         <section className="note-box">還沒有收藏。在社區頁、建案頁按「☆ 收藏」，或在成交卡片右下角按 ☆。</section>
@@ -52,15 +54,18 @@ export default function FavoritesPage({ meta, favs, onBack, onOpenEntity, onShow
           <div className="row">
             <span className="tag">{KIND_NAME[f.kind]}</span>
             <b>{f.name}</b>
+            {alerts[f.key] > 0 && <span className="new-badge">{alerts[f.key]} 筆新成交</span>}
           </div>
           <div className="note-box">
-            {f.kind === "t" ? districtName(f.district) : f.district}
+            {f.kind === "t" ? districtName(f.district) : f.kind === "a" ? "有新成交時，選單會出現紅點" : f.district}
             {f.sub ? ` · ${f.sub}` : ""}
             {Object.values(f.note).some(Boolean) ? " · 有筆記" : ""}
           </div>
           <div className="actions-row" style={{ marginBottom: 0 }}>
             {f.kind === "t" ? (
               <button className="action-btn" onClick={() => onShowTx(f)} disabled={f.lat == null}>📍 地圖上看</button>
+            ) : f.kind === "a" ? (
+              <button className="action-btn" onClick={() => onOpenArea(f)}>📍 地圖上看範圍內成交</button>
             ) : (
               <button className="action-btn" onClick={() => onOpenEntity(f.id, f.shard)}>開啟{KIND_NAME[f.kind]}頁</button>
             )}

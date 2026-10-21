@@ -4,8 +4,8 @@
  */
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { BarChart, ChartFrame, ScatterChart, type ScatterPoint } from "../charts/Charts";
-import { loadEntity, type CommRegistry } from "../data";
-import { ANOMALY, floorPremium, forStats, monthlyCounts, salesGrid, summary } from "../analysis";
+import { loadEntity, loadSearch, type CommRegistry } from "../data";
+import { ANOMALY, floorPremium, forStats, monthlyCounts, resalePairs, salesGrid, summary } from "../analysis";
 import type { Favorites } from "../favorites";
 import { floorClass } from "../filters";
 import { fmtDate, fmtPct, fmtPing, fmtTotal, fmtUnit, fmtUnitShort, fmtYm } from "../format";
@@ -62,6 +62,25 @@ export default function EntityPage(p: Props) {
       alive = false;
     };
   }, [meta, p.id, p.shard, p.reg]);
+
+  // 預售建案：載入交屋後的社區（土地地號連結），做「預售價 → 轉手價」追蹤
+  const [linkEnt, setLinkEnt] = useState<Entity | null>(null);
+  useEffect(() => {
+    setLinkEnt(null);
+    const id = ent?.info.presale ? ent.info.link : null;
+    if (!id) return;
+    let alive = true;
+    const gi = p.reg.byId.get(id);
+    const shard: Promise<number> =
+      gi !== undefined ? Promise.resolve(p.reg.list[gi].shard) : loadSearch(meta).then((l) => l.find((e) => e.id === id)?.shard ?? -1);
+    shard
+      .then((sh) => (sh >= 0 ? loadEntity(meta, id, sh, p.reg) : null))
+      .then((e) => alive && setLinkEnt(e))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [ent, meta, p.reg]);
 
   const cancelBit = useMemo(() => {
     const f = meta.flags.find((x) => x.name === "解約");
@@ -153,7 +172,15 @@ export default function EntityPage(p: Props) {
     return Math.abs(d) >= ANOMALY ? d : undefined;
   };
   const sorted = [...ent.txs].sort((a, b) => b.date - a.date);
-  const linked = info.link ? p.reg.list[p.reg.byId.get(info.link) ?? -1] : undefined;
+  const linked = info.link ? (p.reg.list[p.reg.byId.get(info.link) ?? -1] ?? linkEnt?.info) : undefined;
+  // 預售 → 交屋後轉手：建案看交屋社區的紀錄；社區看自己的紀錄
+  const resaleTxs = isP ? linkEnt?.txs ?? [] : ent.txs;
+  const pairs = resalePairs(resaleTxs, meta);
+  const resaleClean = forStats(resaleTxs.filter((t) => t.kind === 0), meta);
+  const resaleMed = resaleClean.length >= 3 ? quantile(resaleClean.map((t) => t.up!), 0.5) : null;
+  const presaleMed = isP ? calc.head.mid ?? null : null;
+  const pairMed = pairs.length ? quantile(pairs.map((x) => x.chg).filter((v): v is number => v != null), 0.5) : null;
+  const pct = (v: number | null) => (v == null ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v * 1000) / 10)}%`);
   // 點散布圖的點或銷控表的格子：在圖下方直接顯示那一筆，不用往下捲去找
   const pickedTx = picked ? ent.txs.find((t) => t.id === picked) : undefined;
   const pickedCard = (from: "scatter" | "grid") =>
@@ -302,6 +329,56 @@ export default function EntityPage(p: Props) {
           >
             <BarChart xs={calc.monthly.months} values={calc.monthly.counts} color={SERIES[mode][0]} />
           </ChartFrame>
+        </section>
+      )}
+
+      {(pairs.length > 0 || (isP && linked && resaleMed != null)) && (
+        <section>
+          <h3>預售 → 交屋後轉手</h3>
+          <div className="tiles">
+            {isP && (
+              <div className="tile">
+                <b>{fmtUnitShort(presaleMed)}<small> 萬/坪</small></b>
+                <small>{calc.headLabel}預售中位單價</small>
+              </div>
+            )}
+            {resaleMed != null && (
+              <div className="tile">
+                <b>{fmtUnitShort(resaleMed)}<small> 萬/坪</small></b>
+                <small>交屋後轉手中位單價（{resaleClean.length} 件）</small>
+              </div>
+            )}
+            {isP && presaleMed != null && resaleMed != null && (
+              <div className="tile">
+                <b>{pct(resaleMed / presaleMed - 1)}</b>
+                <small>轉手比預售</small>
+              </div>
+            )}
+            {pairs.length > 0 && (
+              <div className="tile">
+                <b>{pct(pairMed)}</b>
+                <small>同一戶轉手總價漲跌中位（{pairs.length} 戶）</small>
+              </div>
+            )}
+          </div>
+          {pairs.length > 0 && (
+            <div className="pair-list">
+              {pairs.slice(0, 30).map((x) => (
+                <div key={x.re.id} className="pair">
+                  <span className="pair-addr">{x.re.addr}</span>
+                  <span>
+                    預售 {fmtTotal(x.ho.tp)}（{fmtYm(x.ho.ym)}）→ 轉手 {fmtTotal(x.re.tp)}（{fmtYm(x.re.ym)}）
+                    <b className={x.chg != null && x.chg < 0 ? "neg" : "pos"}> {pct(x.chg)}</b>
+                    <small> · 持有約 {x.years.toFixed(1)} 年</small>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="note-box">
+            同一戶：買賣表的「預售交屋」紀錄記的是當初的預售簽約價，與之後同門牌、同樓層的一般買賣配對。總價都含車位。
+            {isP && !linked && "這個建案還沒找到交屋後的社區。"}
+          </p>
         </section>
       )}
 

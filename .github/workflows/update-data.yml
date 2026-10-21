@@ -18,6 +18,7 @@ on:
       - "web/**"
       - "tests/**"
       - "data/manual/**"
+      - "data/layers/**"
       - ".github/workflows/update-data.yml"
 
 permissions:

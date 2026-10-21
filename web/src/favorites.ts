@@ -7,9 +7,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export const NOTE_FIELDS = ["結構", "防水", "隔音", "格局", "售後服務", "價格"] as const;
 export type NoteField = (typeof NOTE_FIELDS)[number] | "其他";
 
+export type FavArea = { type: "circle"; center: [number, number]; radius: number } | { type: "polygon"; points: [number, number][] };
+
 export interface Fav {
-  key: string; // c:代號、p:代號、t:編號
-  kind: "c" | "p" | "t";
+  key: string; // c:代號、p:代號、t:編號、a:建立時間
+  kind: "c" | "p" | "t" | "a"; // a：收藏的範圍（圓或多邊形）
   id: string;
   name: string;
   district: string;
@@ -20,6 +22,9 @@ export interface Fav {
   addedAt: string;
   note: Partial<Record<NoteField, string>>;
   noteAt?: string;
+  area?: FavArea; // 範圍收藏
+  seenN?: number; // 社區／建案：上次看到的成交筆數（2012 年起）
+  seenIds?: string[]; // 範圍：上次看到的近 12 月成交編號
 }
 
 const KEY = "lvr-favs-v1";
@@ -74,6 +79,13 @@ export function useFavorites() {
     );
   }, []);
   const remove = useCallback((key: string) => setFavs((list) => list.filter((f) => f.key !== key)), []);
+  /** 更新「已看過」的基準（新成交提醒用） */
+  const update = useCallback((key: string, patch: Partial<Pick<Fav, "seenN" | "seenIds">>) => {
+    setFavs((list) => list.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+  }, []);
+  const add = useCallback((f: Omit<Fav, "addedAt" | "note">) => {
+    setFavs((list) => (list.some((x) => x.key === f.key) ? list : [{ ...f, addedAt: new Date().toISOString(), note: {} }, ...list]));
+  }, []);
 
   const exportJson = useCallback(() => {
     const blob = new Blob(
@@ -106,7 +118,7 @@ export function useFavorites() {
     return { added, updated };
   }, []);
 
-  return { favs, isFav, toggle, setNote, remove, exportJson, importJson, saveError };
+  return { favs, isFav, toggle, setNote, remove, update, add, exportJson, importJson, saveError };
 }
 
 export type Favorites = ReturnType<typeof useFavorites>;

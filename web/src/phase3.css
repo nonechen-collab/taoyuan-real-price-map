@@ -1,0 +1,57 @@
+/* ── Phase 3：租賃、估價助手、新成交提醒、圖層、轉手追蹤 ── */
+
+/* 買賣／租賃切換 */
+.mode-seg { flex: none; background: var(--card); box-shadow: var(--shadow); }
+.mode-seg button { min-height: 36px; padding: 0 12px; font-weight: 600; }
+.tag.rent { background: var(--warn-soft); color: var(--warn); font-weight: 700; }
+
+/* 選單紅點、新成交標籤 */
+.menu-btn { position: relative; }
+.menu-btn .dot {
+  position: absolute; top: 6px; right: 6px; width: 10px; height: 10px; border-radius: 50%;
+  background: #e34948; border: 2px solid var(--card);
+}
+.new-badge {
+  display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 700;
+  background: #e34948; color: #fff; vertical-align: middle;
+}
+
+/* 圖層選單 */
+.layer-menu { max-height: 70vh; overflow-y: auto; }
+.layer-h { display: block; margin: 12px 0 6px; font-size: 14px; }
+.layer-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.flood-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.flood-legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+
+/* 估價助手 */
+.val-form { display: flex; flex-direction: column; gap: 10px; }
+.val-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+.val-row > span:first-child { color: var(--muted); font-size: 14px; }
+.val-row input, .val-row select {
+  min-height: 40px; min-width: 0; width: 9em; padding: 0 10px; font-size: 16px; text-align: right;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text);
+}
+.val-row select { text-align: left; }
+.val-pair { display: inline-flex; align-items: center; gap: 6px; }
+.val-pair input { width: 4.5em; }
+.val-row.switch { justify-content: flex-start; }
+.comp-list { display: flex; flex-direction: column; gap: 6px; }
+.comp {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 12px; background: var(--chip); min-height: 44px;
+}
+.comp input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+.comp-main { display: flex; flex-direction: column; gap: 2px; font-size: 14px; min-width: 0; }
+.comp-main small { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.comp.off { opacity: 0.45; }
+.comp.off .comp-main b { text-decoration: line-through; }
+
+/* 預售 → 轉手 */
+.pair-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.pair { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--chip); font-size: 13px; }
+.pair-addr { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.pair b.pos { color: #c2410c; }
+.pair b.neg { color: #1d4ed8; }
+:root.dark .pair b.pos, .dark .pair b.pos { color: #fb923c; }
+:root.dark .pair b.neg, .dark .pair b.neg { color: #93c5fd; }
+.val-row.switch { gap: 10px; font-size: 15px; }
+.val-row.switch input { width: 22px; height: 22px; min-height: 0; flex: none; }

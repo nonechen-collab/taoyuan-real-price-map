@@ -181,3 +181,31 @@ export function summary(values: number[]) {
     hi: quantile(values, 0.75),
   };
 }
+
+export interface ResalePair {
+  ho: Tx; // 預售交屋紀錄（當初的預售簽約價）
+  re: Tx; // 之後的轉手
+  chg: number | null; // 總價變化（比例）
+  years: number;
+}
+
+/** 同一戶「預售簽約價 → 交屋後轉手價」：買賣表的預售交屋紀錄與之後同門牌同樓層的一般買賣配對 */
+export function resalePairs(txs: Tx[], meta: Meta): ResalePair[] {
+  const hoBit = 1 << (meta.flags.find((f) => f.name === "預售交屋")?.bit ?? 31);
+  const ho = new Map<string, Tx>();
+  for (const t of txs) {
+    if (t.kind !== 0 || !(t.fx & hoBit) || t.tp == null) continue;
+    const prev = ho.get(t.addr);
+    if (!prev || t.date < prev.date) ho.set(t.addr, t);
+  }
+  const out: ResalePair[] = [];
+  for (const t of txs) {
+    if (t.kind !== 0 || t.fx & hoBit || t.tp == null) continue;
+    const h = ho.get(t.addr);
+    if (!h || t.date <= h.date) continue;
+    const days = (Date.UTC(Math.floor(t.date / 10000), (Math.floor(t.date / 100) % 100) - 1, t.date % 100) -
+      Date.UTC(Math.floor(h.date / 10000), (Math.floor(h.date / 100) % 100) - 1, h.date % 100)) / 86400000;
+    out.push({ ho: h, re: t, chg: h.tp ? t.tp / h.tp - 1 : null, years: days / 365.25 });
+  }
+  return out.sort((a, b) => b.re.date - a.re.date);
+}

@@ -2,7 +2,7 @@ import type { Community, DistrictMeta, Entity, Meta, PartMeta, SearchEntry, Stat
 
 const BASE = `${import.meta.env.BASE_URL}data/`;
 
-async function getJson<T>(path: string, fresh = false): Promise<T> {
+export async function getJson<T>(path: string, fresh = false): Promise<T> {
   // meta.json 每次都問伺服器有沒有新版；其他檔名含版本碼，內容不會變，可直接用快取
   const res = await fetch(BASE + path, fresh ? { cache: "no-cache" } : undefined);
   if (!res.ok) throw new Error(`${path}：HTTP ${res.status}`);

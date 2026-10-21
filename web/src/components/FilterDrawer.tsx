@@ -7,6 +7,7 @@ interface Props {
   value: Filters;
   defaults: Filters;
   count: number;
+  rentMode?: boolean; // 租賃模式：只套用期間、行政區、型態、房數、坪數
   onChange: (f: Filters) => void;
   onClose: () => void;
 }
@@ -57,7 +58,7 @@ const AGE_PRESETS: [string, number | null, number | null][] = [
   ["不限", null, null], ["5 年內", null, 5], ["5–10 年", 5, 10], ["10–20 年", 10, 20], ["20–30 年", 20, 30], ["30 年以上", 30, null],
 ];
 
-export default function FilterDrawer({ meta, value, defaults, count, onChange, onClose }: Props) {
+export default function FilterDrawer({ meta, value, defaults, count, rentMode, onChange, onClose }: Props) {
   const [f, setF] = useState(value);
   const set = (patch: Partial<Filters>) => {
     const next = { ...f, ...patch };
@@ -74,6 +75,7 @@ export default function FilterDrawer({ meta, value, defaults, count, onChange, o
           <button className="link" onClick={() => { setF(defaults); onChange(defaults); }}>全部重設</button>
         </header>
         <div className="drawer-body">
+          {rentMode && <p className="note-box">租賃模式只套用：期間、行政區、建物型態、房數、坪數，以及「排除特殊交易」（社宅包租代管、親友、租金異常）。</p>}
           <Group title="類別">
             <Chip on={f.kinds.includes(0)} onClick={() => set({ kinds: toggle(f.kinds, 0) })}>買賣</Chip>
             <Chip on={f.kinds.includes(1)} onClick={() => set({ kinds: toggle(f.kinds, 1) })}>預售屋</Chip>
