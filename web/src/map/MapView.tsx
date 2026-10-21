@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Map as MLMap,
   type ExpressionSpecification,
@@ -237,6 +237,7 @@ export default function MapView(p: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const ready = useRef(false);
+  const [bearing, setBearing] = useState(0);
   const props = useRef(p);
   props.current = p;
 
@@ -256,7 +257,8 @@ export default function MapView(p: Props) {
       pitchWithRotate: false,
       touchPitch: false,
     });
-    m.touchZoomRotate.disableRotation();
+    // 雙指可旋轉（不傾斜）；桌機右鍵留給「設圓心」，所以不開滑鼠拖曳旋轉
+    m.touchZoomRotate.enableRotation();
     map.current = m;
     if (import.meta.env.DEV) (window as unknown as { __map: MLMap }).__map = m;
     m.on("error", (e) => console.warn("[map]", e.error?.message ?? e));
@@ -272,6 +274,7 @@ export default function MapView(p: Props) {
       emitView();
     });
     m.on("moveend", emitView);
+    m.on("rotate", () => setBearing(m.getBearing()));
 
     // 點選
     const drawingNow = () => props.current.drawing !== null;
@@ -349,7 +352,22 @@ export default function MapView(p: Props) {
     }
   }, [p.fly]);
 
-  return <div ref={el} className="map" />;
+  return (
+    <>
+      <div ref={el} className="map" />
+      {Math.abs(bearing) > 1 && (
+        <button
+          className="compass"
+          aria-label="轉回正北"
+          title="轉回正北"
+          onClick={() => map.current?.easeTo({ bearing: 0, duration: 400 })}
+        >
+          <span style={{ transform: `rotate(${-bearing}deg)` }}>▲</span>
+          <small>北</small>
+        </button>
+      )}
+    </>
+  );
 }
 
 // 只在值改變時才更新地圖，避免每次重繪都 setData

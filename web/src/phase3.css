@@ -55,3 +55,12 @@
 :root.dark .pair b.neg, .dark .pair b.neg { color: #93c5fd; }
 .val-row.switch { gap: 10px; font-size: 15px; }
 .val-row.switch input { width: 22px; height: 22px; min-height: 0; flex: none; }
+
+/* 地圖旋轉後的指北針：點一下轉回正北 */
+.compass {
+  position: absolute; top: calc(env(safe-area-inset-top) + 176px); right: 12px; z-index: 5; width: 44px; height: 44px; border-radius: 50%;
+  border: 0; background: var(--card); color: var(--text); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
+}
+.compass span { display: block; color: #e34948; font-size: 14px; }
+.compass small { font-size: 10px; margin-top: 1px; }
