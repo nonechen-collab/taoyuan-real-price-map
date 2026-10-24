@@ -15,7 +15,7 @@ export function exportCsv(txs: Tx[], meta: Meta, comms: Community[], label: stri
   const head = [
     "交易日期", "類別", "行政區", "地址", "社區或建案", "棟及號", "建物型態", "樓層", "總樓層", "樓層分類", "屋齡（年）",
     "房", "廳", "衛", "總價（萬）", "扣車位單價（萬/坪）", "權狀坪（不含車位）", "室內坪（主建物）", "公設比",
-    "車位數", "車位類別", "車位價（萬）", "車位價是否估算", "旗標", "位置精度", "編號",
+    "車位數", "車位類別", "車位價（萬）", "車位價是否估算", "旗標", "位置精度", "編號", "這戶第幾次買賣", "這戶共買賣幾次",
   ];
   const estBit = meta.flags.find((f) => f.name === "車位未拆價")?.bit;
   const rows = txs.map((t) => {
@@ -47,6 +47,8 @@ export function exportCsv(txs: Tx[], meta: Meta, comms: Community[], label: stri
       flags,
       meta.geoLevels[String(t.geo)] ?? "",
       t.id,
+      t.to ?? "",
+      t.tn ?? "",
     ];
   });
   const body = [head, ...rows].map((r) => r.map(cell).join(",")).join("\r\n");

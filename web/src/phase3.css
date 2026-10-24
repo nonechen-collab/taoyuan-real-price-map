@@ -64,3 +64,8 @@
 }
 .compass span { display: block; color: #e34948; font-size: 14px; }
 .compass small { font-size: 10px; margin-top: 1px; }
+
+/* 降價標記、同戶交易次數 */
+.tag.drop { background: rgba(42, 120, 214, 0.15); color: #1d4ed8; font-weight: 700; }
+.dark .tag.drop { background: rgba(57, 135, 229, 0.25); color: #93c5fd; }
+.trade-n { color: var(--accent); font-weight: 600; }

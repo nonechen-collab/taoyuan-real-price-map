@@ -201,6 +201,15 @@ def _rail_kind(t):
     """機場捷運只認桃園捷運（避免把臺北捷運算進來）；臺北捷運等其他路網不收"""
     s = " ".join(t.get(k, "") for k in ("network", "operator", "name", "railway", "construction", "construction:railway"))
     net_op = t.get("network", "") + t.get("operator", "")
+    # 興建中的捷運站多半只有站號（ref）、沒有路網名稱：A＝機場捷運、G／GE＝綠線、LB＝三鶯線
+    # （臺北捷運也有 G 開頭站號，但在桃園市範圍外，後面會被裁掉）
+    ref = t.get("ref", "")
+    if re.match(r"^GE?\d", ref):
+        return "捷運綠線"
+    if re.match(r"^A\d", ref):
+        return "機場捷運"
+    if re.match(r"^LB\d", ref):
+        return "捷運三鶯線"
     if "綠線" in s or "Green Line" in s:
         return "捷運綠線"
     # 機場捷運先判斷：A18「高鐵桃園站」名稱有「高鐵」但屬於桃園捷運
@@ -273,7 +282,7 @@ def osm(log=print):
         if not kind or lat is None or not name or (kind, name) in seen or not inside(lat, lon):
             continue
         seen.add((kind, name))
-        building = "construction" in t.get("railway", "") or "construction" in t or kind == "捷運綠線"
+        building = "construction" in t.get("railway", "") or any(k.startswith("construction") for k in t)
         stations.append([name, kind, round(lat, 5), round(lon, 5), 1 if building else 0])
     log(f"  車站 {len(stations)} 個：{dict(collections.Counter(x[1] for x in stations))}")
     schools, seen = [], set()

@@ -18,7 +18,7 @@ import urllib.parse
 from . import clean, config, net
 from .doorplate import DoorPlates, twd97_to_wgs84
 
-LEVELS = {1: "門牌", 2: "鄰近門牌", 3: "交叉口", 4: "巷弄", 5: "路段", 9: "未定位"}
+LEVELS = {0: "手動指定", 1: "門牌", 2: "鄰近門牌", 3: "交叉口", 4: "巷弄", 5: "路段", 9: "未定位"}
 APPROX = {4, 5}  # 前端標「概略位置」
 FIELDS = ["鍵", "緯度", "經度", "精度", "來源", "門牌資料月份", "日期", "對應門牌", "版本"]
 VERSION = "2"  # 比對規則改進時加 1：之前失敗（精度 9）的地址會重比

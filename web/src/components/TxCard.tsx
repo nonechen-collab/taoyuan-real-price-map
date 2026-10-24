@@ -30,6 +30,7 @@ function TxCard({ t, meta, community, dist, breaks, selected, onSelect, onCommun
   const cc = colorClass(t.up, breaks);
   const park = t.pn ? meta.parkTypes[t.pt] ?? "車位" : null;
   const parkUnpriced = flags.some((f) => f.name === "車位未拆價");
+  const dropped = flags.some((f) => f.name === "降價");
 
   useEffect(() => {
     if (selected) setOpen(true);
@@ -44,11 +45,11 @@ function TxCard({ t, meta, community, dist, breaks, selected, onSelect, onCommun
           {flags
             .filter((f) => !HIDDEN_TAGS.has(f.name))
             .map((f) => (
-              <span key={f.name} className={`tag ${f.exclude ? "warn" : ""}`}>
-                {f.name}
+              <span key={f.name} className={`tag ${f.exclude ? "warn" : ""} ${f.name === "降價" ? "drop" : ""}`} title={f.note}>
+                {f.name === "降價" ? "↓ 降價" : f.name}
               </span>
             ))}
-          {dev !== undefined && (
+          {dev !== undefined && !(dropped && dev < 0) && (
             <span className={`tag ${dev > 0 ? "dev-hi" : "dev-lo"}`}>
               比社區中位 {dev > 0 ? "+" : "−"}{Math.round(Math.abs(dev) * 100)}%
             </span>
@@ -70,6 +71,7 @@ function TxCard({ t, meta, community, dist, breaks, selected, onSelect, onCommun
           <span>{meta.btypes[t.bt]}</span>
           <span>{fmtAge(t.age, t.kind)}</span>
           <span>{fmtLayout(t.rm, t.hl, t.ba)}</span>
+          {t.tn != null && t.tn >= 2 && <span className="trade-n">這戶第 {t.to}／{t.tn} 次買賣</span>}
         </div>
         <div className="tx-row tx-meta">
           <span>權狀 {fmtPing(t.pg)}</span>

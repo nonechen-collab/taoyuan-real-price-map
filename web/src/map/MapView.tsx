@@ -57,7 +57,7 @@ interface Props {
 
 export const FLOOD_COLORS = ["#a5f3fc", "#67e8f9", "#22d3ee", "#0891b2", "#155e75"];
 export const POI_COLORS: Record<string, string> = {
-  機場捷運: "#7c3aed", 台鐵: "#111827", 高鐵: "#ea580c", 捷運綠線: "#16a34a", 學校: "#b45309", 公園: "#15803d",
+  機場捷運: "#7c3aed", 台鐵: "#111827", 高鐵: "#ea580c", 捷運綠線: "#16a34a", 捷運三鶯線: "#0284c7", 學校: "#b45309", 公園: "#15803d",
 };
 
 export const ZOOM_COMM = 13;

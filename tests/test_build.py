@@ -59,5 +59,37 @@ class TestSectionEstimate(unittest.TestCase):
         self.assertIsNone(build._estimate(self.idx, {"中壢區|散段|01000000"}, set()))
 
 
+
+class TestTradesAndDrops(unittest.TestCase):
+    def _r(self, rid, date, unit, addr="桃園市中壢區中正路1號五樓", cid="c1", mask=0, btype="住宅大樓"):
+        import datetime as dt
+        return {"kind": "a", "id": rid, "district": "中壢區", "addr": addr, "date": dt.date(*date), "unit": unit,
+                "cid": cid, "mask": mask, "btype": btype, "flags": []}
+
+    def test_count_trades(self):
+        recs = [self._r("A", (2015, 3, 1), 20), self._r("B", (2021, 6, 1), 30),
+                self._r("C", (2018, 1, 1), 25, addr="桃園縣中壢市中正路1號五樓"),  # 升格前的舊地址也算同一戶
+                self._r("D", (2020, 1, 1), 28, addr="桃園市中壢區中正路1號六樓")]
+        self.assertEqual(build.count_trades(recs), 3)
+        by = {r["id"]: r for r in recs}
+        self.assertEqual((by["A"]["to"], by["C"]["to"], by["B"]["to"]), (1, 2, 3))
+        self.assertEqual(by["B"]["tn"], 3)
+        self.assertNotIn("tn", by["D"])
+
+    def test_price_drop(self):
+        from pipeline import rules
+        flags = rules.Flags()
+        recs = [self._r(f"P{i}", (2025, m, 1), 40, addr=f"x{i}") for i, m in enumerate((1, 2, 3, 4))]
+        cheap = self._r("Q", (2025, 6, 1), 37.5, addr="q")  # 比前 12 個月中位 40 低 6.25%
+        near = self._r("R", (2025, 7, 1), 39, addr="r")  # 只低 2.5%，不算
+        excluded = self._r("S", (2025, 8, 1), 20, addr="s", mask=flags.default_exclude_mask() & -flags.default_exclude_mask())
+        recs += [cheap, near, excluded]
+        self.assertEqual(build.mark_price_drops(recs, flags), 1)
+        self.assertIn("降價", cheap["flags"])
+        self.assertNotIn("降價", near["flags"])
+        self.assertNotIn("降價", excluded["flags"])
+        self.assertTrue(cheap["mask"] & flags.bit["降價"])
+
+
 if __name__ == "__main__":
     unittest.main()

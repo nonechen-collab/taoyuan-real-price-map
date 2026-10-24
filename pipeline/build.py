@@ -28,7 +28,7 @@ MULTI_UNIT = {"住宅大樓", "華廈", "公寓", "套房", "辦公"}  # 這些�
 TODAY = config.now_tw().date()  # 交易日期晚於今天（＋31 天）視為打錯
 PARK_TYPES = ["坡道平面", "一樓平面", "升降平面", "坡道機械", "升降機械", "塔式車位", "其他"]
 FIELDS = ["id", "k", "d", "lat", "lon", "geo", "addr", "cid", "bt", "fl", "tf", "age", "rm", "hl", "ba",
-          "tp", "up", "pg", "ip", "pr", "pn", "pt", "pp", "pa", "el", "fx", "un"]
+          "tp", "up", "pg", "ip", "pr", "pn", "pt", "pp", "pa", "el", "fx", "un", "tn", "to"]
 DETAIL_FIELDS = ["移轉層次", "交易筆棟數", "交易標的", "備註", "建物型態", "主要用途", "主要建材", "建築完成年月",
                  "建物移轉總面積平方公尺", "主建物面積", "附屬建物面積", "陽台面積", "車位類別",
                  "車位移轉總面積平方公尺", "車位總價元", "總價元", "單價元平方公尺", "解約情形", "期別",
@@ -354,7 +354,13 @@ def build(offline=False, log=print):
         errs.sort()
         log(f"  同地段推估位置：{nsec:,} 個建案（驗證 {len(errs):,} 個已知位置的建案：誤差中位 {errs[len(errs) // 2]:.0f} m、"
             f"P90 {errs[len(errs) * 9 // 10]:.0f} m、300 m 內 {sum(e <= 300 for e in errs) / len(errs):.0%}）")
+    nman = apply_manual_locations(recs, proj_info)
+    if nman:
+        log(f"  手動指定位置：{nman} 個建案")
     est = finish_prices(recs, flags)
+    ntrade = count_trades(recs)
+    ndrop = mark_price_drops(recs, flags)
+    log(f"  同一戶買賣 2 次以上：{ntrade:,} 筆；降價：{ndrop:,} 筆")
     fill_project_ratios(recs, proj_info)
     log(f"  車位估價完成（{(config.now_tw() - t0).seconds} 秒）")
     out_stats = write_outputs(recs, comm_info, proj_info, plist, flags, t0, rents)
@@ -373,6 +379,81 @@ def mark_affordable(recs, parcels):
         if secs and rules.affordable(r["district"], secs, r["date"]):
             r["flags"].append("合宜住宅")
             n += 1
+    return n
+
+
+MANUAL_LOCATIONS = config.DATA / "manual" / "project_locations.csv"
+
+
+def apply_manual_locations(recs, proj_info, path=MANUAL_LOCATIONS):
+    """data/manual/project_locations.csv（行政區,建案名稱,緯度,經度,備註）：手動指定預售建案位置，優先於自動定位（精度 0）"""
+    if not path.exists():
+        return 0
+    n = 0
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        for row in csv.DictReader(f):
+            d, name = (row.get("行政區") or "").strip(), (row.get("建案名稱") or "").strip()
+            try:
+                lat, lon = float(row.get("緯度") or ""), float(row.get("經度") or "")
+            except ValueError:
+                continue
+            pi = proj_info.get(community.project_id(d, name))
+            if not pi or not (24.58 <= lat <= 25.13 and 120.98 <= lon <= 121.52):
+                continue
+            pi["lat"], pi["lon"], pi["level"] = round(lat, 6), round(lon, 6), 0
+            n += 1
+    for r in recs:
+        if r["kind"] == "b" and r.get("cid") in proj_info and proj_info[r["cid"]]["level"] == 0:
+            pi = proj_info[r["cid"]]
+            r["lat"], r["lon"], r["level"] = pi["lat"], pi["lon"], 0
+    return n
+
+
+def count_trades(recs):
+    """同一戶（行政區＋門牌含樓層）2012 年起的買賣次數：r["tn"] 共幾次、r["to"] 這是第幾次（含預售交屋那一次）。
+    回傳屬於「買賣 2 次以上」的筆數"""
+    units = collections.defaultdict(list)
+    for r in recs:
+        if r["kind"] == "a" and r["addr"]:
+            units[(r["district"], clean.strip_city(r["addr"], r["district"]))].append(r)
+    n = 0
+    for rs in units.values():
+        if len(rs) < 2:
+            continue
+        rs.sort(key=lambda r: (r["date"], r["id"]))
+        for i, r in enumerate(rs, 1):
+            r["tn"], r["to"] = len(rs), i
+        n += len(rs)
+    return n
+
+
+DROP_RATIO = 0.95  # 比前 12 個月社區中位數低 5% 以上才算降價
+
+
+def mark_price_drops(recs, flags):
+    """一般買賣（住宅、未被預設排除）比同社區前 12 個月中位數低 5% 以上 → 旗標「降價」。回傳筆數"""
+    ex = flags.default_exclude_mask()
+    by_c = collections.defaultdict(list)
+    for r in recs:
+        if r["kind"] == "a" and r.get("cid") and r["unit"] is not None and not r["mask"] & ex and r["btype"] in DEFAULT_BTYPES:
+            by_c[r["cid"]].append(r)
+    bit = flags.bit["降價"]
+    n = 0
+    for rs in by_c.values():
+        if len(rs) < 4:
+            continue
+        rs.sort(key=lambda r: r["date"])
+        days = [r["date"].toordinal() for r in rs]
+        for i, r in enumerate(rs):
+            lo = bisect.bisect_left(days, days[i] - 365)
+            hi = bisect.bisect_left(days, days[i])  # 只看之前的（同一天的不算）
+            if hi - lo < 3:
+                continue
+            m = statistics.median(x["unit"] for x in rs[lo:hi])
+            if r["unit"] <= m * DROP_RATIO:
+                r["flags"].append("降價")
+                r["mask"] |= bit
+                n += 1
     return n
 
 
@@ -588,6 +669,7 @@ def _tx_row(r, district, lidx):
         _r(r["park_price_eff"] / 10000, 1) if r["park_n"] else None,
         _r(r["park_area_eff"] * clean.PING, 1) if r["park_n"] else None,
         None if r["elevator"] is None else int(r["elevator"]), r["mask"], r["unit_no"] or None,
+        r.get("tn"), r.get("to"),
     ]
 
 

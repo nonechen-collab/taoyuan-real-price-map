@@ -135,6 +135,8 @@ export interface Tx {
   el: number | null; // 電梯 1/0
   fx: number; // 旗標位元
   un: string | null; // 預售棟及號
+  tn: number | null; // 同一戶 2012 年起買賣次數（2 次以上才有）
+  to: number | null; // 這是第幾次
 }
 
 export interface Community {

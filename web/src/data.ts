@@ -84,6 +84,8 @@ function decodeTx(r: Row, f: Idx, i: number, d: { code: string; name: string }, 
     el: num(r[f.el]),
     fx: (r[f.fx] as number) ?? 0,
     un: (r[f.un] as string | null) ?? null,
+    tn: f.tn === undefined ? null : num(r[f.tn]),
+    to: f.to === undefined ? null : num(r[f.to]),
   };
 }
 

@@ -69,7 +69,7 @@ export function LayerMenu({ basemap, village, onBasemap, onVillage, meta, layers
               </>
             )}
           </div>
-          {layers.st && <p className="layer-note">機場捷運紫、台鐵黑、高鐵橘、捷運綠線綠（黃框＝興建中）</p>}
+          {layers.st && <p className="layer-note">機場捷運紫、台鐵黑、高鐵橘、捷運綠線綠、三鶯線藍（黃框＝興建中）</p>}
           <b className="layer-h">土壤液化潛勢</b>
           <div className="chips">
             <button className={`chip small ${!layers.liq ? "on" : ""}`} onClick={() => onLayers({ ...layers, liq: null })}>關</button>
